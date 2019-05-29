@@ -16,19 +16,18 @@ type driver struct {
 }
 
 var (
-	driverName = "csi-rclone"
-	Version   = "latest"
-	BuildTime = "1970-01-01 00:00:00"
+	DriverName = "csi-rclone"
+	DriverVersion = "latest"
 )
 
 func NewDriver(nodeID, endpoint string) *driver {
-	glog.Infof("Starting new %s driver in version %s built %s", driverName, Version, BuildTime)
+	glog.Infof("Starting new %s driver in version %s", DriverName, DriverVersion)
 
 	d := &driver{}
 
 	d.endpoint = endpoint
 
-	d.csiDriver = csicommon.NewCSIDriver(driverName, Version, nodeID)
+	d.csiDriver = csicommon.NewCSIDriver(DriverName, DriverVersion, nodeID)
 	d.csiDriver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER})
 	d.csiDriver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{csi.ControllerServiceCapability_RPC_UNKNOWN})
 
