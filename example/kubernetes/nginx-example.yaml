@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: data-rclone-example
+  labels:
+    name: data-rclone-example
+spec:
+  accessModes:
+  - ReadWriteMany
+  capacity:
+    storage: 10Gi
+  storageClassName: rclone
+  csi:
+    driver: csi-rclone
+    volumeHandle: data-id
+    volumeAttributes:
+      remote: "s3"
+      remotePath: "projectname/pvname"
+      s3-provider: "Minio"
+      s3-endpoint: "http://minio-release.default:9000"
+      s3-access-key-id: "ACCESS_KEY_ID"
+      s3-secret-access-key: "SECRET_ACCESS_KEY"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-rclone-example
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: rclone
+  selector:
+    matchLabels:
+      name: data-rclone-example
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-example
+  labels:
+    run: nginx-example
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Always
+    name: nginx-example
+    ports:
+    - containerPort: 80
+      protocol: TCP
+    volumeMounts:
+      - mountPath: /usr/share/nginx/html
+        name: data-rclone-example
+  volumes:
+  - name: data-rclone-example
+    persistentVolumeClaim:
+      claimName: data-rclone-example
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-example
+  labels:
+    run: nginx-example
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+  selector:
+    run: nginx-example

@@ -7,8 +7,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"os/exec"
-	"io/ioutil"
-	"path"
 	"strings"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -124,12 +122,6 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if notMnt {
 		return nil, status.Error(codes.NotFound, "Volume not mounted")
 	}
-
-	// Remove files so they get removed from remote storage too
-	dir, err := ioutil.ReadDir(req.GetTargetPath())
-    for _, d := range dir {
-        os.RemoveAll(path.Join([]string{req.GetTargetPath(), d.Name()}...))
-    }
 
 	err = util.UnmountPath(req.GetTargetPath(), mount.New(""))
 	if err != nil {

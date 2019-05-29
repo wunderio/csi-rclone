@@ -84,10 +84,10 @@ make push
 
 + ~Default settings from global configmap/secret~
 + ~Settings override from pvc~
-+ ~Delete remotePath (or bucket, if the remotePath is empty) on pv deletion~
 + Quick install overview + example deployment + svc for example
 + Build instructions with the description how the go references remote repository
 - Helm chart with storageclass name overrride?
 - Multiple / fixed versions?
 - Terraform deployment / helm chart
 - volumeAttributes sanitization?
+- Controller & ControllerUnpublishVolume implementation. Delete remotePath (or bucket, if the remotePath is empty) when `reclaimPolicy` is set to `delete`.
