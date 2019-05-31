@@ -13,7 +13,7 @@
 # limitations under the License.
 
 VERSION=$(shell cat VERSION)
-REGISTRY_NAME=jancis
+REGISTRY_NAME=wunderio
 IMAGE_NAME=csi-rclone
 IMAGE_TAG=$(REGISTRY_NAME)/$(IMAGE_NAME):$(VERSION)
 
@@ -23,7 +23,7 @@ all: plugin container push
 
 plugin:
 	go mod download
-	CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-X github.com/Jancis/csi-rclone/pkg/rclone.DriverVersion=$(VERSION) -extldflags "-static"' -o _output/csi-rclone-plugin ./cmd/csi-rclone-plugin
+	CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-X github.com/wunderio/csi-rclone/pkg/rclone.DriverVersion=$(VERSION) -extldflags "-static"' -o _output/csi-rclone-plugin ./cmd/csi-rclone-plugin
 	
 container:
 	docker build -t $(IMAGE_TAG) -f ./cmd/csi-rclone-plugin/Dockerfile .

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"github.com/spf13/cobra"
-	"github.com/Jancis/csi-rclone/pkg/rclone"
+	"github.com/wunderio/csi-rclone/pkg/rclone"
 )
 
 var (

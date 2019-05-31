@@ -44,7 +44,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: rclone
-          image: jancis/csi-rclone:latest
+          image: wunderio/csi-rclone:latest
           args :
             - "--nodeid=$(NODE_ID)"
             - "--endpoint=$(CSI_ENDPOINT)"

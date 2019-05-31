@@ -1,4 +1,4 @@
-module github.com/Jancis/csi-rclone
+module github.com/wunderio/csi-rclone
 
 require (
 	github.com/container-storage-interface/spec v1.0.0
