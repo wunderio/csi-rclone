@@ -1,7 +1,11 @@
 
 
 ## Kubernetes cluster compatability
+Does not work: 
+ - v1.12.7-gke.10, driver name csi-rclone not found in the list of registered CSI drivers
+
 kubernetes 1.13.x
+ - ok
 
 ## Installing CSI driver to kubernetes cluster
 TLDR: ` kubectl apply -f deploy/kubernetes --username=admin --password=123`
@@ -86,7 +90,8 @@ make push
 + ~Settings override from pvc~
 + ~Quick install overview + example deployment + svc for example~
 + ~Build instructions with the description how the go references remote repository~
-- Helm chart with storageclass name overrride?
++ ~Helm chart with storageclass name overrride~
++ ~move up default rclone flags, allow overrides for defaults~
 - Multiple / fixed versions?
 - Terraform deployment / helm chart
 - volumeAttributes sanitization?

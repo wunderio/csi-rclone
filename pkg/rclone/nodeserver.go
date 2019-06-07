@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/kubernetes/pkg/volume/util"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/kubernetes-csi/drivers/pkg/csi-common"
 )
@@ -53,7 +54,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	}
 
 	// Load default connection settings from secret
-	secret, e := getSecret("kube-system/rclone-secret")
+	secret, e := getSecret("rclone-secret")
 
 	remote, remotePath, flags, e := extractFlags(req.GetVolumeContext(), secret)
 	if e != nil {
@@ -85,7 +86,7 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 	if len(volumeContext) > 0 {
 		flags = volumeContext
 	} else {
-		if len(secret.Data) > 0 {
+		if secret.Data != nil && len(secret.Data) > 0 {
 			// Needs byte to string casting for map values
 			for k, v := range secret.Data {
 			    flags[k] = string(v)
@@ -154,18 +155,26 @@ func validateFlags(flags map[string]string) error {
 }
 
 func getSecret(secretName string) (*v1.Secret, error) {
-	namespaceAndSecret := strings.SplitN(secretName, "/", 2)
-	namespace := namespaceAndSecret[0]
-	name := namespaceAndSecret[1]
-
 	clientset, e := GetK8sClient()
 	if e != nil {
 		return nil, status.Errorf(codes.Internal, "can not create kubernetes client: %s", e)
 	}
 
-	secret, e := clientset.CoreV1().
+	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+        clientcmd.NewDefaultClientConfigLoadingRules(),
+        &clientcmd.ConfigOverrides{},
+	)
+
+	namespace, _, err := kubeconfig.Namespace()
+    if err != nil {
+        return nil, status.Errorf(codes.Internal, "can't get current namespace, error %s", secretName, err)
+    }
+
+    glog.Infof("Loading csi-rclone connection defaults from secret %s/%s", namespace, secretName)
+
+    secret, e := clientset.CoreV1().
 		Secrets(namespace).
-		Get(name, metav1.GetOptions{})
+		Get(secretName, metav1.GetOptions{})
 
 	if e != nil {
 		return nil, status.Errorf(codes.Internal, "can't load csi-rclone settings from secret %s: %s", secretName, e)
@@ -176,9 +185,15 @@ func getSecret(secretName string) (*v1.Secret, error) {
 
 // func Mount(params mountParams, target string, opts ...string) error {
 func Mount(remote string, remotePath string, targetPath string, flags map[string]string) error {
-	
 	mountCmd := "rclone"
 	mountArgs := []string{}
+
+	defaultFlags := map[string]string{}
+	defaultFlags["cache-info-age"] = "72h"
+	defaultFlags["cache-chunk-clean-interval"] = "15m"
+	defaultFlags["dir-cache-time"] = "5s"
+	defaultFlags["vfs-cache-mode"] = "writes"
+	defaultFlags["allow-other"] = "true"
 
 	// rclone mount remote:path /path/to/mountpoint [flags]
 
@@ -187,16 +202,20 @@ func Mount(remote string, remotePath string, targetPath string, flags map[string
 		"mount",
 		fmt.Sprintf(":%s:%s", remote, remotePath),
 		targetPath,
-		"--cache-info-age=72h",
-		"--cache-chunk-clean-interval=15m",
-		"--dir-cache-time=5s",
-		"--vfs-cache-mode=writes",
-		"--allow-other",
 		"--daemon",
 	)
 
+	// Add default flags
+	for k, v := range defaultFlags {
+		// Exclude overriden flags
+		if _, ok := flags[k]; !ok {
+			mountArgs = append(mountArgs,fmt.Sprintf("--%s=%s", k, v))
+    	}
+	}	
+
+	// Add user supplied flags
 	for k, v := range flags {
-	    mountArgs = append(mountArgs,fmt.Sprintf("--%s=%s", k, v))
+		mountArgs = append(mountArgs,fmt.Sprintf("--%s=%s", k, v))
 	}
 
 	// create target, os.Mkdirall is noop if it exists
