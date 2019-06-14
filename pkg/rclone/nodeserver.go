@@ -84,6 +84,7 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 
 	// Secret values are default, gets merged and overriden by corresponding PV values
 	if secret.Data != nil && len(secret.Data) > 0 {
+
 		// Needs byte to string casting for map values
 		for k, v := range secret.Data {
 		    flags[k] = string(v)
@@ -104,6 +105,11 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 
 	remote := flags["remote"]
 	remotePath := flags["remotePath"]
+
+	if remotePathSuffix, ok := flags["remotePathSuffix"]; ok {
+	    remotePath = remotePath + remotePathSuffix
+	    delete(flags, "remotePathSuffix")
+	}
 
 	delete(flags, "remote")
 	delete(flags, "remotePath")
