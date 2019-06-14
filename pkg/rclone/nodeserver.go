@@ -82,17 +82,19 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 	// Empty argument list
 	flags := make(map[string]string)
 
-	// Load params from either VolumeContext or secret (VolumeContext takes precedence)
-	if len(volumeContext) > 0 {
-		flags = volumeContext
+	// Secret values are default, gets merged and overriden by corresponding PV values
+	if secret.Data != nil && len(secret.Data) > 0 {
+		// Needs byte to string casting for map values
+		for k, v := range secret.Data {
+		    flags[k] = string(v)
+		}
 	} else {
-		if secret.Data != nil && len(secret.Data) > 0 {
-			// Needs byte to string casting for map values
-			for k, v := range secret.Data {
-			    flags[k] = string(v)
-			}
-		} else {
-			return "", "", flags, status.Errorf(codes.InvalidArgument, "connection details not set")
+		glog.Infof("No csi-rclone connection defaults secret found.")
+	}
+
+	if len(volumeContext) > 0 {
+		for k, v := range volumeContext {
+		    flags[k] = v
 		}
 	}
 

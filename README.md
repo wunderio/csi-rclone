@@ -1,11 +1,12 @@
 
 
 ## Kubernetes cluster compatability
+Works:
+ - 1.13.x
+ 
 Does not work: 
  - v1.12.7-gke.10, driver name csi-rclone not found in the list of registered CSI drivers
 
-kubernetes 1.13.x
- - ok
 
 ## Installing CSI driver to kubernetes cluster
 TLDR: ` kubectl apply -f deploy/kubernetes --username=admin --password=123`
@@ -32,7 +33,7 @@ stringData:
 Deploy example secret
 > `kubectl apply -f example/kubernetes/rclone-secret-example.yaml --namespace kube-system`
 
-3. You can override configuration via PersistentStorage resource definition. Leave volumeAttributes empty if you don't want to.
+3. You can override configuration via PersistentStorage resource definition. Leave volumeAttributes empty if you don't want to. Keys in `volumeAttributes` will be merged with predefined parameters.
 
 ```
 apiVersion: v1
