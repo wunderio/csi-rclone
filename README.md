@@ -1,4 +1,7 @@
 
+# CSI rclone mount plugin
+
+This project implements Container Storage Interface (CSI) plugin that allows using [rclone mount](https://rclone.org/) as storage backend. Rclone mount points and [parameters](https://rclone.org/commands/rclone_mount/) can be configured using Secret or PersistentVolume volumeAttibutes. 
 
 ## Kubernetes cluster compatability
 Works:
@@ -93,6 +96,7 @@ make push
 + ~Build instructions with the description how the go references remote repository~
 + ~Helm chart with storageclass name overrride~
 + ~move up default rclone flags, allow overrides for defaults~
+- persistent service that points to deployment
 - Multiple / fixed versions?
 - Terraform deployment / helm chart
 - volumeAttributes sanitization?
