@@ -19,7 +19,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: node-driver-registrar
-          image: quay.io/k8scsi/csi-node-driver-registrar:v1.0.2
+          image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
           lifecycle:
             preStop:
               exec:
@@ -44,7 +44,7 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
-          image: wunderio/csi-rclone:v1.2.0
+          image: wunderio/csi-rclone:v1.2.3
           args:
             - "--nodeid=$(NODE_ID)"
             - "--endpoint=$(CSI_ENDPOINT)"
@@ -56,6 +56,10 @@ spec:
             - name: CSI_ENDPOINT
               value: unix://plugin/csi.sock
           imagePullPolicy: "Always"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "mount -t fuse.rclone | while read -r mount; do umount $(echo $mount | awk '{print $3}') ; done"]
           volumeMounts:
             - name: plugin-dir
               mountPath: /plugin

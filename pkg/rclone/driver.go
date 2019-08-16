@@ -2,8 +2,8 @@ package rclone
 
 import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 	"k8s.io/klog"
-	"github.com/kubernetes-csi/drivers/pkg/csi-common"
 )
 
 type driver struct {
@@ -16,7 +16,7 @@ type driver struct {
 }
 
 var (
-	DriverName = "csi-rclone"
+	DriverName    = "csi-rclone"
 	DriverVersion = "latest"
 )
 
@@ -37,7 +37,6 @@ func NewDriver(nodeID, endpoint string) *driver {
 func NewNodeServer(d *driver) *nodeServer {
 	return &nodeServer{
 		DefaultNodeServer: csicommon.NewDefaultNodeServer(d.csiDriver),
-		mounts:            map[string]*mountPoint{},
 	}
 }
 
