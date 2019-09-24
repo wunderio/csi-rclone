@@ -256,12 +256,12 @@ func Mount(remote string, remotePath string, targetPath string, flags map[string
 		return err
 	}
 
-	klog.Infof("executing mount command cmd=%s, args=%s", mountCmd, mountArgs)
+	klog.Infof("executing mount command cmd=%s, remote=:%s:%s, targetpath=%s", mountCmd, remote, remotePath, targetPath)
 
 	out, err := exec.Command(mountCmd, mountArgs...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("mounting failed: %v cmd: '%s %s' output: %q",
-			err, mountCmd, strings.Join(mountArgs, " "), string(out))
+		return fmt.Errorf("mounting failed: %v cmd: '%s' remote: ':%s:%s' targetpath: %s output: %q",
+			err, mountCmd, remote, remotePath, targetPath, string(out))
 	}
 
 	return nil
