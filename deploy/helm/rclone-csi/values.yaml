@@ -1,0 +1,39 @@
+# Default values for rclone-csi.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+configs:
+  remote: "s3"
+  #remotePath: "projectname"
+  #s3-provider: "Minio"
+  #s3-endpoint: "http://minio-release.default:9000"
+  #s3-access-key-id: "ACCESS_KEY_ID"
+  #s3-secret-access-key: "SECRET_ACCESS_KEY"
+
+storageClassName: rclone
+
+# Advanced settings
+# Changing these settings is not advised unless you know what you are doing
+pluginDirectory: /var/lib/kubelet/plugins/csi-rclone
+csiPlugin:
+  image: wunderio/csi-rclone:v1.2.3
+  args:
+    - "--nodeid=$(NODE_ID)"
+    - "--endpoint=$(CSI_ENDPOINT)"
+csiAttacher:
+  image: quay.io/k8scsi/csi-attacher:v1.1.1
+  args: 
+    - "--v=5"
+    - "--csi-address=$(ADDRESS)"
+csiClusterRegistrar:
+  image: quay.io/k8scsi/csi-cluster-driver-registrar:v1.0.1
+  args:
+    - "--v=5"
+    - "--pod-info-mount-version=\"v1\""
+    - "--csi-address=$(ADDRESS)"
+csiNodeRegistrar:
+  image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
+  args:
+    - --v=5
+    - --csi-address=/plugin/csi.sock
+    - --kubelet-registration-path=/var/lib/kubelet/plugins/csi-rclone/csi.sock
