@@ -87,17 +87,3 @@ make container
 ``` 
 make push
 ```
-
-## TODO
-
-+ ~Default settings from global configmap/secret~
-+ ~Settings override from pvc~
-+ ~Quick install overview + example deployment + svc for example~
-+ ~Build instructions with the description how the go references remote repository~
-+ ~Helm chart with storageclass name overrride~
-+ ~move up default rclone flags, allow overrides for defaults~
-- persistent service that points to deployment
-- Multiple / fixed versions?
-- Terraform deployment / helm chart
-- volumeAttributes sanitization?
-- Controller & ControllerUnpublishVolume implementation. Delete remotePath (or bucket, if the remotePath is empty) when `reclaimPolicy` is set to `delete`.
