@@ -103,7 +103,7 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 	flags := make(map[string]string)
 
 	// Secret values are default, gets merged and overriden by corresponding PV values
-	if secret.Data != nil && len(secret.Data) > 0 {
+	if secret !=nil && secret.Data != nil && len(secret.Data) > 0 {
 
 		// Needs byte to string casting for map values
 		for k, v := range secret.Data {
@@ -152,16 +152,19 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if err != nil && !mount.IsCorruptedMnt(err) {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	
 	if notMnt && !mount.IsCorruptedMnt(err) {
-		return nil, status.Error(codes.NotFound, "Volume not mounted")
-	}
+		klog.Error("Volume not mounted")
+	
+	} else {
+		err = util.UnmountPath(req.GetTargetPath(), m)
+		if err != nil {
+			klog.Error("Error while unmounting path")
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 
-	err = util.UnmountPath(req.GetTargetPath(), m)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		klog.Infof("Volume %s unmounted successfully", req.VolumeId)
 	}
-
-	klog.Infof("Volume %s unmounted successfully", req.VolumeId)
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }

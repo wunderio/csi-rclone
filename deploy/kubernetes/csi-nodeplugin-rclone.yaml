@@ -21,7 +21,7 @@ spec:
         - name: node-driver-registrar
           image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
           lifecycle:
-            preStop:
+            postStart:
               exec:
                 command: ["/bin/sh", "-c", "rm -rf /registration/csi-rclone /registration/csi-rclone-reg.sock"]
           args:
@@ -44,7 +44,7 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
-          image: wunderio/csi-rclone:v1.2.3
+          image: wunderio/csi-rclone:v1.2.5
           args:
             - "--nodeid=$(NODE_ID)"
             - "--endpoint=$(CSI_ENDPOINT)"
@@ -57,7 +57,7 @@ spec:
               value: unix://plugin/csi.sock
           imagePullPolicy: "Always"
           lifecycle:
-            preStop:
+            postStart:
               exec:
                 command: ["/bin/sh", "-c", "mount -t fuse.rclone | while read -r mount; do umount $(echo $mount | awk '{print $3}') ; done"]
           volumeMounts:
