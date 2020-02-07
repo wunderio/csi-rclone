@@ -21,7 +21,7 @@ spec:
         - name: node-driver-registrar
           image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
           lifecycle:
-            postStart:
+            preStop:
               exec:
                 command: ["/bin/sh", "-c", "rm -rf /registration/csi-rclone /registration/csi-rclone-reg.sock"]
           args:
