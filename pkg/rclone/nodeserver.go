@@ -154,7 +154,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 	
 	if notMnt && !mount.IsCorruptedMnt(err) {
-		klog.Error("Volume not mounted")
+		klog.Infof("Volume not mounted")
 	
 	} else {
 		err = util.UnmountPath(req.GetTargetPath(), m)
