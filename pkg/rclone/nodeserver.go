@@ -100,10 +100,10 @@ func extractFlags(volumeContext map[string]string) (string, string, map[string]s
 
 	var secret *v1.Secret
 
-	if volumeContext["secretName"] != "" {
+	if secretName, ok := volumeContext["secretName"]; ok {
 		// Load the secret that the PV spec defines
 		var e error
-		secret, e = getSecret(volumeContext["secretName"])
+		secret, e = getSecret(secretName)
 		if e != nil {
 			// if the user explicitly requested a secret and there is an error fetching it, bail with an error
 			return "", "", nil, e
