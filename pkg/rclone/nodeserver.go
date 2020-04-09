@@ -103,7 +103,7 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 	flags := make(map[string]string)
 
 	// Secret values are default, gets merged and overriden by corresponding PV values
-	if secret !=nil && secret.Data != nil && len(secret.Data) > 0 {
+	if secret != nil && secret.Data != nil && len(secret.Data) > 0 {
 
 		// Needs byte to string casting for map values
 		for k, v := range secret.Data {
@@ -152,14 +152,16 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if err != nil && !mount.IsCorruptedMnt(err) {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	
+
 	if notMnt && !mount.IsCorruptedMnt(err) {
 		klog.Infof("Volume not mounted")
-	
+
 	} else {
 		err = util.UnmountPath(req.GetTargetPath(), m)
 		if err != nil {
-			klog.Error("Error while unmounting path")
+			klog.Infof("Error while unmounting path: %s", err)
+			// This will exit and fail the NodeUnpublishVolume making it to retry unmount on the next api schedule trigger.
+			// Since we mount the volume with allow-non-empty now, we could skip this one too.
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 
@@ -218,7 +220,7 @@ func getSecret(secretName string) (*v1.Secret, error) {
 	return secret, nil
 }
 
-// func Mount(params mountParams, target string, opts ...string) error {
+// Mount routine.
 func Mount(remote string, remotePath string, targetPath string, flags map[string]string) error {
 	mountCmd := "rclone"
 	mountArgs := []string{}
@@ -228,6 +230,7 @@ func Mount(remote string, remotePath string, targetPath string, flags map[string
 	defaultFlags["cache-chunk-clean-interval"] = "15m"
 	defaultFlags["dir-cache-time"] = "5s"
 	defaultFlags["vfs-cache-mode"] = "writes"
+	defaultFlags["allow-non-empty"] = "true"
 	defaultFlags["allow-other"] = "true"
 
 	// rclone mount remote:path /path/to/mountpoint [flags]
