@@ -103,7 +103,7 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 	flags := make(map[string]string)
 
 	// Secret values are default, gets merged and overriden by corresponding PV values
-	if secret !=nil && secret.Data != nil && len(secret.Data) > 0 {
+	if secret != nil && secret.Data != nil && len(secret.Data) > 0 {
 
 		// Needs byte to string casting for map values
 		for k, v := range secret.Data {
@@ -152,10 +152,10 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if err != nil && !mount.IsCorruptedMnt(err) {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	
+
 	if notMnt && !mount.IsCorruptedMnt(err) {
 		klog.Infof("Volume not mounted")
-	
+
 	} else {
 		err = util.UnmountPath(req.GetTargetPath(), m)
 		if err != nil {
@@ -218,6 +218,13 @@ func getSecret(secretName string) (*v1.Secret, error) {
 	return secret, nil
 }
 
+func flagToEnvName(flag string) string {
+	// To find the name of the environment variable, first, take the long option name, strip the leading --, change - to _, make upper case and prepend RCLONE_.
+	flag = strings.ToUpper(flag)
+	flag = strings.ReplaceAll(flag, "-", "_")
+	return fmt.Sprintf("RCLONE_%s", flag)
+}
+
 // func Mount(params mountParams, target string, opts ...string) error {
 func Mount(remote string, remotePath string, targetPath string, flags map[string]string) error {
 	mountCmd := "rclone"
@@ -240,17 +247,19 @@ func Mount(remote string, remotePath string, targetPath string, flags map[string
 		"--daemon",
 	)
 
+	env := os.Environ()
+
 	// Add default flags
 	for k, v := range defaultFlags {
 		// Exclude overriden flags
 		if _, ok := flags[k]; !ok {
-			mountArgs = append(mountArgs, fmt.Sprintf("--%s=%s", k, v))
+			env = append(env, fmt.Sprintf("%s=%s", flagToEnvName(k), v))
 		}
 	}
 
 	// Add user supplied flags
 	for k, v := range flags {
-		mountArgs = append(mountArgs, fmt.Sprintf("--%s=%s", k, v))
+		env = append(env, fmt.Sprintf("%s=%s", flagToEnvName(k), v))
 	}
 
 	// create target, os.Mkdirall is noop if it exists
@@ -261,7 +270,9 @@ func Mount(remote string, remotePath string, targetPath string, flags map[string
 
 	klog.Infof("executing mount command cmd=%s, remote=:%s:%s, targetpath=%s", mountCmd, remote, remotePath, targetPath)
 
-	out, err := exec.Command(mountCmd, mountArgs...).CombinedOutput()
+	cmd := exec.Command(mountCmd, mountArgs...)
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mounting failed: %v cmd: '%s' remote: ':%s:%s' targetpath: %s output: %q",
 			err, mountCmd, remote, remotePath, targetPath, string(out))
