@@ -220,8 +220,9 @@ func getSecret(secretName string) (*v1.Secret, error) {
 
 func flagToEnvName(flag string) string {
 	// To find the name of the environment variable, first, take the long option name, strip the leading --, change - to _, make upper case and prepend RCLONE_.
-	flag = strings.ToUpper(flag)
+	flag = strings.TrimPrefix(flag, "--") // we dont pass prefixed args, but strictly this is the algorithm
 	flag = strings.ReplaceAll(flag, "-", "_")
+	flag = strings.ToUpper(flag)
 	return fmt.Sprintf("RCLONE_%s", flag)
 }
 
