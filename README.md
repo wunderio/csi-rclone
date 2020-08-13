@@ -6,6 +6,9 @@ This project implements Container Storage Interface (CSI) plugin that allows usi
 ## Kubernetes cluster compatability
 Works:
  - 1.13.x
+ - 1.14.x
+ - 1.15.x
+ - 1.16.x
  
 Does not work: 
  - v1.12.7-gke.10, driver name csi-rclone not found in the list of registered CSI drivers
