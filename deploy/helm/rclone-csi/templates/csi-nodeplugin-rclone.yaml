@@ -1,0 +1,89 @@
+# This YAML file contains driver-registrar & csi driver nodeplugin API objects
+# that are necessary to run CSI nodeplugin for rclone
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: csi-nodeplugin-rclone
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "rclone-csi.name" . }}
+    helm.sh/chart: {{ include "rclone-csi.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: csi-nodeplugin-rclone
+  template:
+    metadata:
+      labels:
+        app: csi-nodeplugin-rclone
+        app.kubernetes.io/name: {{ include "rclone-csi.fullname" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: csi-nodeplugin-rclone
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: node-driver-registrar
+          image: {{ .Values.csiNodeRegistrar.image }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "rm -rf /registration/csi-rclone /registration/csi-rclone-reg.sock"]
+          args:
+            {{- range $arg := .Values.csiNodeRegistrar.args }}
+            - {{ $arg | quote -}}
+            {{- end }}
+          env:
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /plugin
+            - name: registration-dir
+              mountPath: /registration
+        - name: rclone
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          image: {{ .Values.csiPlugin.image }}
+          args:
+            {{- range $arg := .Values.csiPlugin.args }}
+            - {{ $arg | quote -}}
+            {{- end }}
+          env:
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CSI_ENDPOINT
+              value: unix://plugin/csi.sock
+          imagePullPolicy: "Always"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "mount -t fuse.rclone | while read -r mount; do umount $(echo $mount | awk '{print $3}') ; done"]
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /plugin
+            - name: pods-mount-dir
+              mountPath: /var/lib/kubelet/pods
+              mountPropagation: "Bidirectional"
+      volumes:
+        - name: plugin-dir
+          hostPath:
+            path: {{ .Values.pluginDirectory }}
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: Directory
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry
+            type: DirectoryOrCreate

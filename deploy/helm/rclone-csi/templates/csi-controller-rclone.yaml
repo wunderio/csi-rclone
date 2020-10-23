@@ -1,0 +1,73 @@
+# This YAML file contains attacher & csi driver API objects that are necessary
+# to run external CSI attacher for rclone
+
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: csi-controller-rclone
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "rclone-csi.name" . }}
+    helm.sh/chart: {{ include "rclone-csi.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  serviceName: "csi-controller-rclone"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: csi-controller-rclone
+  template:
+    metadata:
+      labels:
+        app: csi-controller-rclone
+        app.kubernetes.io/name: {{ include "rclone-csi.fullname" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: csi-controller-rclone
+      containers:
+        - name: csi-attacher
+          image: {{ .Values.csiAttacher.image }}
+          args:
+            {{- range $arg := .Values.csiAttacher.args }}
+            - {{ $arg | quote -}}
+            {{- end }}
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          imagePullPolicy: "Always"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-cluster-driver-registrar
+          image: {{ .Values.csiClusterRegistrar.image }}
+          args:
+            {{- range $arg := .Values.csiClusterRegistrar.args }}
+            - {{ $arg | quote -}}
+            {{- end }}
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: rclone
+          image: wunderio/csi-rclone:v1.2.3
+          args:
+            {{- range $arg := .Values.csiPlugin.args }}
+            - {{ $arg | quote -}}
+            {{- end }}
+          env:
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CSI_ENDPOINT
+              value: unix://plugin/csi.sock
+          imagePullPolicy: "Always"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /plugin
+      volumes:
+        - name: socket-dir
+          emptyDir:
