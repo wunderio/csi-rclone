@@ -44,7 +44,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: rclone
-          image: wunderio/csi-rclone:v1.2.6
+          image: wunderio/csi-rclone:v1.2.8
           args :
             - "--nodeid=$(NODE_ID)"
             - "--endpoint=$(CSI_ENDPOINT)"
@@ -61,4 +61,4 @@ spec:
               mountPath: /plugin
       volumes:
         - name: socket-dir
-          emptyDir:
+          emptyDir: {}
