@@ -2,22 +2,23 @@ package rclone
 
 import (
 	"fmt"
-	"github.com/golang/glog"
-	"k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/golang/glog"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/kubernetes/pkg/volume/util"
-	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/kubernetes-csi/drivers/pkg/csi-common"
+	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 )
 
 type nodeServer struct {
@@ -26,8 +27,8 @@ type nodeServer struct {
 }
 
 type mountPoint struct {
-	VolumeId     string
-	MountPath    string
+	VolumeId  string
+	MountPath string
 }
 
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
@@ -78,7 +79,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 }
 
 func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, string, map[string]string, error) {
-	
+
 	// Empty argument list
 	flags := make(map[string]string)
 
@@ -87,7 +88,7 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 
 		// Needs byte to string casting for map values
 		for k, v := range secret.Data {
-		    flags[k] = string(v)
+			flags[k] = string(v)
 		}
 	} else {
 		glog.Infof("No csi-rclone connection defaults secret found.")
@@ -95,7 +96,7 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 
 	if len(volumeContext) > 0 {
 		for k, v := range volumeContext {
-		    flags[k] = v
+			flags[k] = v
 		}
 	}
 
@@ -107,8 +108,8 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 	remotePath := flags["remotePath"]
 
 	if remotePathSuffix, ok := flags["remotePathSuffix"]; ok {
-	    remotePath = remotePath + remotePathSuffix
-	    delete(flags, "remotePathSuffix")
+		remotePath = remotePath + remotePathSuffix
+		delete(flags, "remotePathSuffix")
 	}
 
 	delete(flags, "remote")
@@ -169,18 +170,18 @@ func getSecret(secretName string) (*v1.Secret, error) {
 	}
 
 	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-        clientcmd.NewDefaultClientConfigLoadingRules(),
-        &clientcmd.ConfigOverrides{},
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{},
 	)
 
 	namespace, _, err := kubeconfig.Namespace()
-    if err != nil {
-        return nil, status.Errorf(codes.Internal, "can't get current namespace, error %s", secretName, err)
-    }
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "can't get current namespace, error %s", secretName, err)
+	}
 
-    glog.Infof("Loading csi-rclone connection defaults from secret %s/%s", namespace, secretName)
+	glog.Infof("Loading csi-rclone connection defaults from secret %s/%s", namespace, secretName)
 
-    secret, e := clientset.CoreV1().
+	secret, e := clientset.CoreV1().
 		Secrets(namespace).
 		Get(secretName, metav1.GetOptions{})
 
@@ -208,7 +209,7 @@ func Mount(remote string, remotePath string, targetPath string, flags map[string
 	mountArgs = append(
 		mountArgs,
 		"mount",
-		fmt.Sprintf(":%s:%s", remote, remotePath),
+		fmt.Sprintf("%s:%s", remote, remotePath),
 		targetPath,
 		"--daemon",
 	)
@@ -217,13 +218,13 @@ func Mount(remote string, remotePath string, targetPath string, flags map[string
 	for k, v := range defaultFlags {
 		// Exclude overriden flags
 		if _, ok := flags[k]; !ok {
-			mountArgs = append(mountArgs,fmt.Sprintf("--%s=%s", k, v))
-    	}
-	}	
+			mountArgs = append(mountArgs, fmt.Sprintf("--%s=%s", k, v))
+		}
+	}
 
 	// Add user supplied flags
 	for k, v := range flags {
-		mountArgs = append(mountArgs,fmt.Sprintf("--%s=%s", k, v))
+		mountArgs = append(mountArgs, fmt.Sprintf("--%s=%s", k, v))
 	}
 
 	// create target, os.Mkdirall is noop if it exists
