@@ -77,13 +77,13 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	// Load default connection settings from secret
 	secret, e := getSecret("rclone-secret")
 
-	remote, remotePath, flags, e := extractFlags(req.GetVolumeContext(), secret)
+	remote, remotePath, configData, flags, e := extractFlags(req.GetVolumeContext(), secret)
 	if e != nil {
 		klog.Warningf("storage parameter error: %s", e)
 		return nil, e
 	}
 
-	e = Mount(remote, remotePath, targetPath, flags)
+	e = Mount(remote, remotePath, targetPath, configData, flags)
 	if e != nil {
 		if os.IsPermission(e) {
 			return nil, status.Error(codes.PermissionDenied, e.Error())
@@ -97,7 +97,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, string, map[string]string, error) {
+func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, string, string, map[string]string, error) {
 
 	// Empty argument list
 	flags := make(map[string]string)
@@ -120,7 +120,7 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 	}
 
 	if e := validateFlags(flags); e != nil {
-		return "", "", flags, e
+		return "", "", "", flags, e
 	}
 
 	remote := flags["remote"]
@@ -131,10 +131,17 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 		delete(flags, "remotePathSuffix")
 	}
 
+	configData := ""
+	ok := false
+
+	if configData, ok = flags["configData"]; ok {
+		delete(flags, "configData")
+	}
+
 	delete(flags, "remote")
 	delete(flags, "remotePath")
 
-	return remote, remotePath, flags, nil
+	return remote, remotePath, configData, flags, nil
 }
 
 func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
@@ -221,7 +228,7 @@ func getSecret(secretName string) (*v1.Secret, error) {
 }
 
 // Mount routine.
-func Mount(remote string, remotePath string, targetPath string, flags map[string]string) error {
+func Mount(remote string, remotePath string, targetPath string, configData string, flags map[string]string) error {
 	mountCmd := "rclone"
 	mountArgs := []string{}
 
@@ -233,15 +240,46 @@ func Mount(remote string, remotePath string, targetPath string, flags map[string
 	defaultFlags["allow-non-empty"] = "true"
 	defaultFlags["allow-other"] = "true"
 
-	// rclone mount remote:path /path/to/mountpoint [flags]
+	remoteWithPath := fmt.Sprintf(":%s:%s", remote, remotePath)
 
+	if strings.Contains(configData, "[" + remote + "]") {
+		remoteWithPath = fmt.Sprintf("%s:%s", remote, remotePath)
+		klog.Infof("remote %s found in configData, remoteWithPath set to %s", remote, remoteWithPath)
+	}
+
+	// rclone mount remote:path /path/to/mountpoint [flags]
 	mountArgs = append(
 		mountArgs,
 		"mount",
-		fmt.Sprintf(":%s:%s", remote, remotePath),
+		remoteWithPath,
 		targetPath,
 		"--daemon",
 	)
+
+	// If a custom flag configData is defined,
+	// create a temporary file, fill it with  configData content,
+	// and run rclone with --config <tmpfile> flag
+	if configData != "" {
+
+		configFile, err := ioutil.TempFile("", "rclone.conf")
+		if err != nil {
+			return err
+		}
+
+		// Normally, a defer os.Remove(configFile.Name()) should be placed here.
+		// However, due to a rclone mount --daemon flag, rclone forks and creates a race condition
+		// with this nodeplugin proceess. As a result, the config file gets deleted
+		// before it's reread by a forked process.
+
+		if _, err := configFile.Write([]byte(configData)); err != nil {
+			return err
+		}
+		if err := configFile.Close(); err != nil {
+			return err
+		}
+
+		mountArgs = append(mountArgs, "--config", configFile.Name())
+	}
 
 	// Add default flags
 	for k, v := range defaultFlags {
@@ -262,12 +300,12 @@ func Mount(remote string, remotePath string, targetPath string, flags map[string
 		return err
 	}
 
-	klog.Infof("executing mount command cmd=%s, remote=:%s:%s, targetpath=%s", mountCmd, remote, remotePath, targetPath)
+	klog.Infof("executing mount command cmd=%s, remote=%s, targetpath=%s", mountCmd, remoteWithPath, targetPath)
 
 	out, err := exec.Command(mountCmd, mountArgs...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("mounting failed: %v cmd: '%s' remote: ':%s:%s' targetpath: %s output: %q",
-			err, mountCmd, remote, remotePath, targetPath, string(out))
+		return fmt.Errorf("mounting failed: %v cmd: '%s' remote: '%s' targetpath: %s output: %q",
+			err, mountCmd, remoteWithPath, targetPath, string(out))
 	}
 
 	return nil
