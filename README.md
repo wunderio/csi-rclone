@@ -4,11 +4,8 @@
 This project implements Container Storage Interface (CSI) plugin that allows using [rclone mount](https://rclone.org/) as storage backend. Rclone mount points and [parameters](https://rclone.org/commands/rclone_mount/) can be configured using Secret or PersistentVolume volumeAttibutes. 
 
 ## Kubernetes cluster compatability
-Works:
- - 1.13.x
- - 1.14.x
- - 1.15.x
- - 1.16.x
+Works (tested):
+ - 1.13.x - 1.20.x
  
 Does not work: 
  - v1.12.7-gke.10, driver name csi-rclone not found in the list of registered CSI drivers
