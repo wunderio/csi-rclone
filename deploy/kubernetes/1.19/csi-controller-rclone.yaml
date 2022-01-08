@@ -1,0 +1,53 @@
+# This YAML file contains attacher & csi driver API objects that are necessary
+# to run external CSI attacher for rclone
+
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: csi-controller-rclone
+  namespace: csi-rclone
+spec:
+  serviceName: "csi-controller-rclone"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: csi-controller-rclone
+  template:
+    metadata:
+      labels:
+        app: csi-controller-rclone
+    spec:
+      serviceAccountName: csi-controller-rclone
+      containers:
+        - name: csi-attacher
+          image: k8s.gcr.io/sig-storage/csi-attacher:v3.4.0
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          imagePullPolicy: "Always"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: rclone
+          image: wunderio/csi-rclone:v1.2.8
+          args :
+            - "--nodeid=$(NODE_ID)"
+            - "--endpoint=$(CSI_ENDPOINT)"
+          env:
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CSI_ENDPOINT
+              value: unix://plugin/csi.sock
+          imagePullPolicy: "Always"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /plugin
+      volumes:
+        - name: socket-dir
+          emptyDir: {}
