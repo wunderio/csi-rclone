@@ -12,9 +12,13 @@ Does not work:
 - v1.12.7-gke.10, driver name csi-rclone not found in the list of registered CSI drivers
 
 ## Installing CSI driver to kubernetes cluster
-TLDR: ` kubectl apply -f deploy/kubernetes --username=admin --password=123`
+TLDR: ` kubectl apply -f deploy/kubernetes/1.19` (or `deploy/kubernetes/1.13` for older version)
 
 1. Set up storage backend. You can use [Minio](https://min.io/), Amazon S3 compatible cloud storage service.
+i.e. 
+```
+helm upgrade --install --create-namespace --namespace minio minio minio/minio --version 6.0.5 --set resources.requests.memory=512Mi --set secretKey=SECRET_ACCESS_KEY --set accessKey=ACCESS_KEY_ID
+```
 
 2. Configure defaults by pushing secret to kube-system namespace. This is optional if you will always define `volumeAttributes` in PersistentVolume.
 
@@ -28,7 +32,7 @@ stringData:
   remote: "s3"
   remotePath: "projectname"
   s3-provider: "Minio"
-  s3-endpoint: "http://minio-release.default:9000"
+  s3-endpoint: "http://minio.minio:9000"
   s3-access-key-id: "ACCESS_KEY_ID"
   s3-secret-access-key: "SECRET_ACCESS_KEY"
 ```
@@ -58,7 +62,7 @@ spec:
       remote: "s3"
       remotePath: "projectname/pvname"
       s3-provider: "Minio"
-      s3-endpoint: "http://minio-release.default:9000"
+      s3-endpoint: "http://minio.minio:9000"
       s3-access-key-id: "ACCESS_KEY_ID"
       s3-secret-access-key: "SECRET_ACCESS_KEY"
 ```
