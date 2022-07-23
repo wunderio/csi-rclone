@@ -3,6 +3,9 @@ package rclone
 import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/klog"
 )
 
@@ -37,6 +40,20 @@ func NewDriver(nodeID, endpoint string) *driver {
 func NewNodeServer(d *driver) *nodeServer {
 	return &nodeServer{
 		DefaultNodeServer: csicommon.NewDefaultNodeServer(d.csiDriver),
+	}
+}
+
+type controllerServer struct {
+	*csicommon.DefaultControllerServer
+}
+
+func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
+	return &csi.ValidateVolumeCapabilitiesResponse{Message: ""}, status.Error(codes.OK, "")
+}
+
+func NewControllerServer(d *csicommon.CSIDriver) *controllerServer {
+	return &controllerServer{
+		DefaultControllerServer: csicommon.NewDefaultControllerServer(d),
 	}
 }
 
