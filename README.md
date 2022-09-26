@@ -91,3 +91,6 @@ make container
 ``` 
 make push
 ```
+## Changelog
+
+See [CHANGELOG.txt](CHANGELOG.txt)
