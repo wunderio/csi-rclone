@@ -74,10 +74,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		mountOptions = append(mountOptions, "ro")
 	}
 
-	// Load default connection settings from secret
-	secret, e := getSecret("rclone-secret")
-
-	remote, remotePath, flags, e := extractFlags(req.GetVolumeContext(), secret)
+	remote, remotePath, flags, e := extractFlags(req.GetVolumeContext())
 	if e != nil {
 		klog.Warningf("storage parameter error: %s", e)
 		return nil, e
@@ -97,7 +94,24 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, string, map[string]string, error) {
+func extractFlags(volumeContext map[string]string) (string, string, map[string]string, error) {
+
+	// Load default connection settings from secret
+
+	var secret *v1.Secret
+
+	if secretName, ok := volumeContext["secretName"]; ok {
+		// Load the secret that the PV spec defines
+		var e error
+		secret, e = getSecret(secretName)
+		if e != nil {
+			// if the user explicitly requested a secret and there is an error fetching it, bail with an error
+			return "", "", nil, e
+		}
+	} else {
+		// use rclone-secret as the default secret if none was defined
+		secret, _ = getSecret("rclone-secret")
+	}
 
 	// Empty argument list
 	flags := make(map[string]string)
@@ -133,6 +147,7 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 
 	delete(flags, "remote")
 	delete(flags, "remotePath")
+	delete(flags, "secretName")
 
 	return remote, remotePath, flags, nil
 }
