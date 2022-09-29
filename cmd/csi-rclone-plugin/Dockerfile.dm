@@ -5,9 +5,9 @@ RUN apk add --no-cache ca-certificates bash fuse curl unzip tini
 
 # Use pre-compiled version (with cirectory marker patch)
 # https://github.com/rclone/rclone/pull/5323
-COPY bin/rclone /usr/bin/rclone
-RUN chmod 755 /usr/bin/rclone \
-    && chown root:root /usr/bin/rclone
+COPY ./install-dm.sh /tmp
+COPY ./rclone-build /tmp/rclone-build
+RUN /tmp/install-dm.sh
 
 COPY ./_output/csi-rclone-plugin-dm /bin/csi-rclone-plugin
 

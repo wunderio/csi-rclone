@@ -44,8 +44,9 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
-          image: wunderio/csi-rclone:v1.2.8
+          image: wunderio/csi-rclone:v1.3.0
           args:
+            - "/bin/csi-rclone-plugin"
             - "--nodeid=$(NODE_ID)"
             - "--endpoint=$(CSI_ENDPOINT)"
           env:
