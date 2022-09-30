@@ -37,6 +37,26 @@ stringData:
   s3-secret-access-key: "SECRET_ACCESS_KEY"
 ```
 
+Alternatively, you may specify rclone configuration file directly in the secret under `configData` field.
+
+```
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rclone-secret
+type: Opaque
+stringData:
+  remote: "my-s3"
+  remotePath: "projectname"
+  configData: |
+    [my-s3]
+    type = s3
+    provider = Minio
+    access_key_id = ACCESS_KEY_ID
+    secret_access_key = SECRET_ACCESS_KEY
+    endpoint = http://minio-release.default:9000
+```
+
 Deploy example secret
 > `kubectl apply -f example/kubernetes/rclone-secret-example.yaml --namespace kube-system`
 
