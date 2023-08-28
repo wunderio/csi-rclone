@@ -20,16 +20,28 @@ IMAGE_TAG=$(REGISTRY_NAME)/$(IMAGE_NAME):$(VERSION)
 .PHONY: all rclone-plugin clean rclone-container
 
 all: plugin container push
+dm: plugin-dm container-dm push-dm
 
 plugin:
 	go mod download
-	CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-X github.com/wunderio/csi-rclone/pkg/rclone.DriverVersion=$(VERSION) -extldflags "-static"' -o _output/csi-rclone-plugin ./cmd/csi-rclone-plugin
+	CGO_ENABLED=0 GOOS=linux go build -a -gcflags=-trimpath=$(go env GOPATH) -asmflags=-trimpath=$(go env GOPATH) -ldflags '-X github.com/wunderio/csi-rclone/pkg/rclone.DriverVersion=$(VERSION) -extldflags "-static"' -o _output/csi-rclone-plugin ./cmd/csi-rclone-plugin
+	
+plugin-dm:
+	go mod download
+	CGO_ENABLED=0 GOOS=linux go build -a -gcflags=-trimpath=$(go env GOPATH) -asmflags=-trimpath=$(go env GOPATH) -ldflags '-X github.com/wunderio/csi-rclone/pkg/rclone.DriverVersion=$(VERSION)-dm -extldflags "-static"' -o _output/csi-rclone-plugin-dm ./cmd/csi-rclone-plugin
 	
 container:
 	docker build -t $(IMAGE_TAG) -f ./cmd/csi-rclone-plugin/Dockerfile .
 
+container-dm:
+	docker build -t $(IMAGE_TAG)-dm -f ./cmd/csi-rclone-plugin/Dockerfile.dm .
+
 push:
 	docker push $(IMAGE_TAG)
+
+push-dm:
+	docker push $(IMAGE_TAG)-dm
+
 clean:
 	go clean -r -x
 	-rm -rf _output

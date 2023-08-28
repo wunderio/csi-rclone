@@ -1,0 +1,5 @@
+# CHANGELOG
+
+1.3.0: 
+  - Container init changed to tini
+  - rclone plugin version v1.59.2

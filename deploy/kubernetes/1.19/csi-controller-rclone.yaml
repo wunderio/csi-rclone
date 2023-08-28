@@ -20,10 +20,11 @@ spec:
       serviceAccountName: csi-controller-rclone
       containers:
         - name: csi-attacher
-          image: quay.io/k8scsi/csi-attacher:v1.1.1
+          image: k8s.gcr.io/sig-storage/csi-attacher:v3.4.0
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -31,21 +32,10 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
-        - name: csi-cluster-driver-registrar
-          image: quay.io/k8scsi/csi-cluster-driver-registrar:v1.0.1
-          args:
-            - "--v=5"
-            - "--pod-info-mount-version=\"v1\""
-            - "--csi-address=$(ADDRESS)"
-          env:
-            - name: ADDRESS
-              value: /csi/csi.sock
-          volumeMounts:
-            - name: socket-dir
-              mountPath: /csi
         - name: rclone
-          image: wunderio/csi-rclone:v1.2.6
+          image: wunderio/csi-rclone:v1.3.1
           args :
+            - "/bin/csi-rclone-plugin"
             - "--nodeid=$(NODE_ID)"
             - "--endpoint=$(CSI_ENDPOINT)"
           env:
@@ -61,4 +51,4 @@ spec:
               mountPath: /plugin
       volumes:
         - name: socket-dir
-          emptyDir:
+          emptyDir: {}
