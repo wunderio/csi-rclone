@@ -227,6 +227,14 @@ func getSecret(secretName string) (*v1.Secret, error) {
 	return secret, nil
 }
 
+func flagToEnvName(flag string) string {
+	// To find the name of the environment variable, first, take the long option name, strip the leading --, change - to _, make upper case and prepend RCLONE_.
+	flag = strings.TrimPrefix(flag, "--") // we dont pass prefixed args, but strictly this is the algorithm
+	flag = strings.ReplaceAll(flag, "-", "_")
+	flag = strings.ToUpper(flag)
+	return fmt.Sprintf("RCLONE_%s", flag)
+}
+
 // Mount routine.
 func Mount(remote string, remotePath string, targetPath string, configData string, flags map[string]string) error {
 	mountCmd := "rclone"
@@ -281,17 +289,19 @@ func Mount(remote string, remotePath string, targetPath string, configData strin
 		mountArgs = append(mountArgs, "--config", configFile.Name())
 	}
 
+	env := os.Environ()
+
 	// Add default flags
 	for k, v := range defaultFlags {
 		// Exclude overriden flags
 		if _, ok := flags[k]; !ok {
-			mountArgs = append(mountArgs, fmt.Sprintf("--%s=%s", k, v))
+			env = append(env, fmt.Sprintf("%s=%s", flagToEnvName(k), v))
 		}
 	}
 
 	// Add user supplied flags
 	for k, v := range flags {
-		mountArgs = append(mountArgs, fmt.Sprintf("--%s=%s", k, v))
+		env = append(env, fmt.Sprintf("%s=%s", flagToEnvName(k), v))
 	}
 
 	// create target, os.Mkdirall is noop if it exists
@@ -302,7 +312,9 @@ func Mount(remote string, remotePath string, targetPath string, configData strin
 
 	klog.Infof("executing mount command cmd=%s, remote=%s, targetpath=%s", mountCmd, remoteWithPath, targetPath)
 
-	out, err := exec.Command(mountCmd, mountArgs...).CombinedOutput()
+	cmd := exec.Command(mountCmd, mountArgs...)
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mounting failed: %v cmd: '%s' remote: '%s' targetpath: %s output: %q",
 			err, mountCmd, remoteWithPath, targetPath, string(out))
