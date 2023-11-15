@@ -3,3 +3,4 @@ _output/
 rclone-build/
 .direnv/
 result
+kubeconfig
