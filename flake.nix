@@ -2,9 +2,8 @@
   description = "A basic flake with a shell";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
-  inputs.kubenix.url = "github:hall/kubenix";
 
-  outputs = { self, nixpkgs, flake-utils, kubenix }:
+  outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
     let
       pkgs = nixpkgs.legacyPackages.${system};
@@ -31,26 +30,57 @@
         # You can add additional kind configuration or setup steps here
       '';
 
+      localDeployScript = pkgs.writeShellApplication {
+        name = "local-deploy";
+
+        runtimeInputs = with pkgs; [ cowsay kubernetes-helm kubectl nix kubectl-convert ];
+
+        text = ''
+          echo "Building container image"
+          nix build .#my-app-with-rclone
+
+          echo "Loading container image into kind"
+          docker load < result
+          kind load docker-image my-app-with-rclone:latest  --name csi-rclone-k8s
+
+          echo "Render helm chart with new container version"
+          helm template csi-rclone deploy/helm_chart
+
+          echo "Deploy to kind cluster"
+          kubectl apply -f devenv/deploy-kind
+
+          echo "Done"
+        '';
+      };
+
     in {
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [
           bashInteractive
+          macfuse-stubs
           just
           kind
           kubectl
+          kubectl-convert
           kubernetes-helm
           rclone
+          yazi
+          nushell
         ];
 
         shellHook = ''
           export PROJECT_ROOT="$(pwd)"
           export CLUSTER_NAME="csi-rclone-k8s"
-          export KUBECONFIG="$PROJECT_ROOT/kubeconfig"
+          export KUBECONFIG="$PROJECT_ROOT/devenv/kind/kubeconfig"
+          export RCLONE_CONFIG=$PROJECT_ROOT/devenv/local-s3/switch-engine-ceph-rclone-config.conf
         '';
       };
 
       packages.my-go-app = myApp;
       packages.my-app-with-rclone = dockerImage;
       packages.startKindCluster = startKindCluster;
+      packages.localDeployScript = localDeployScript;
     });
+
+
 }
