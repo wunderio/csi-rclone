@@ -23,7 +23,12 @@ spec:
           lifecycle:
             preStop:
               exec:
-                command: ["/bin/sh", "-c", "rm -rf /registration/csi-rclone /registration/csi-rclone-reg.sock"]
+                command:
+                  [
+                    "/bin/sh",
+                    "-c",
+                    "rm -rf /registration/csi-rclone /registration/csi-rclone-reg.sock",
+                  ]
           args:
             - --v=5
             - --csi-address=/plugin/csi.sock
@@ -44,7 +49,7 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
-          image: wunderio/csi-rclone:v1.3.1
+          image: wunderio/csi-rclone:v1.3.3
           args:
             - "/bin/csi-rclone-plugin"
             - "--nodeid=$(NODE_ID)"
@@ -60,7 +65,12 @@ spec:
           lifecycle:
             postStart:
               exec:
-                command: ["/bin/sh", "-c", "mount -t fuse.rclone | while read -r mount; do umount $(echo $mount | awk '{print $3}') ; done"]
+                command:
+                  [
+                    "/bin/sh",
+                    "-c",
+                    "mount -t fuse.rclone | while read -r mount; do umount $(echo $mount | awk '{print $3}') ; done",
+                  ]
           volumeMounts:
             - name: plugin-dir
               mountPath: /plugin
