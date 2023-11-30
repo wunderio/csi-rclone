@@ -49,9 +49,10 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
-          image: wunderio/csi-rclone:v1.3.3
+          #image: wunderio/csi-rclone:v1.3.3
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           args:
-            - "/bin/csi-rclone-plugin"
+            - "csi-rclone"
             - "--nodeid=$(NODE_ID)"
             - "--endpoint=$(CSI_ENDPOINT)"
           env:
@@ -61,7 +62,7 @@ spec:
                   fieldPath: spec.nodeName
             - name: CSI_ENDPOINT
               value: unix://plugin/csi.sock
-          imagePullPolicy: "Always"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           lifecycle:
             postStart:
               exec:

@@ -33,9 +33,9 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: rclone
-          image: wunderio/csi-rclone:v1.3.3
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           args:
-            - "/bin/csi-rclone-plugin"
+            - "/bin/linux_arm64/csi-rclone-plugin"
             - "--nodeid=$(NODE_ID)"
             - "--endpoint=$(CSI_ENDPOINT)"
           env:
@@ -45,7 +45,7 @@ spec:
                   fieldPath: spec.nodeName
             - name: CSI_ENDPOINT
               value: unix://plugin/csi.sock
-          imagePullPolicy: "Always"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           volumeMounts:
             - name: socket-dir
               mountPath: /plugin
