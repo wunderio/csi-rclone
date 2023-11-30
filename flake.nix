@@ -101,9 +101,17 @@
             kubectl
             kubernetes-helm
             pre-commit
-            pre-commit-hook-ensure-sops
+            #pre-commit-hook-ensure-sops
             rclone
             yazi
+
+            # Go
+            go_1_20 # Go v1.20
+            golangci-lint # Linter
+            gopls # LSP
+            gotools # Additional Tooling
+
+
           ];
 
           shellHook = ''
