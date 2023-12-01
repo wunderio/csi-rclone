@@ -111,6 +111,9 @@
             gopls # LSP
             gotools # Additional Tooling
 
+            # Nix
+            nil
+
 
           ];
 
