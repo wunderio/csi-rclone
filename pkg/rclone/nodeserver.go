@@ -16,8 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/kubernetes/pkg/util/mount"
-	"k8s.io/kubernetes/pkg/volume/util"
+	"k8s.io/kubernetes/pkg/volume"
 
 	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 )
@@ -250,7 +249,7 @@ func Mount(remote string, remotePath string, targetPath string, configData strin
 
 	remoteWithPath := fmt.Sprintf(":%s:%s", remote, remotePath)
 
-	if strings.Contains(configData, "[" + remote + "]") {
+	if strings.Contains(configData, "["+remote+"]") {
 		remoteWithPath = fmt.Sprintf("%s:%s", remote, remotePath)
 		klog.Infof("remote %s found in configData, remoteWithPath set to %s", remote, remoteWithPath)
 	}
