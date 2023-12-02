@@ -9,13 +9,13 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
-        myApp = (pkgs.buildGoModule {
+        myApp = pkgs.buildGoModule {
           pname = "csi-rclone";
           version = "1.0.0";
           src = ./.;
           vendorSha256 = "sha256-V0DWAfnAHmpuFLn+/IIIO7qecidnvGSYTVOJ/3qAsMg=";
           CGO = 0;
-        }).overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; GOARCH = "arm64"; });
+        };
 
         dockerImage = pkgs.dockerTools.buildImage {
           name = "csi-rclone";
@@ -130,6 +130,7 @@
         };
 
         packages.csi-rclone-binary = myApp;
+        packages.csi-rclone-binary-linux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; GOARCH = "arm64"; });
         packages.csi-rclone-container = dockerImage;
         packages.startKindCluster = startKindCluster;
         packages.deployToKind = localDeployScript;
