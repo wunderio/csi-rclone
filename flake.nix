@@ -43,6 +43,39 @@
           # You can add additional kind configuration or setup steps here
         '';
 
+        initKindCluster = pkgs.writeShellApplication {
+          name = "init-kind-cluster";
+
+          runtimeInputs = with pkgs; [ kubectl kind ];
+
+          text = ''
+            echo "Init Kind cluster"
+            kind create cluster --name "$CLUSTER_NAME"
+          '';
+        };
+
+        deleteKindCluster = pkgs.writeShellApplication {
+          name = "delete-kind-cluster";
+
+          runtimeInputs = with pkgs; [ kubectl kind ];
+
+          text = ''
+            echo "Delete Kind cluster"
+            kind delete cluster --name "$CLUSTER_NAME"
+          '';
+        };
+
+        getKindKubeconfig = pkgs.writeShellApplication {
+          name = "get-kind-kubeconfig";
+
+          runtimeInputs = with pkgs; [ kubectl kind ];
+
+          text = ''
+            echo "Get kubeconfig"
+            kind get kubeconfig --name "$CLUSTER_NAME" > "$PROJECT_ROOT"/devenv/kind/kubeconfig
+          '';
+        };
+
         localDeployScript = pkgs.writeShellApplication {
           name = "local-deploy";
 
@@ -94,16 +127,12 @@
       {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
+            # DevTools
             bashInteractive
-            macfuse-stubs
-            just
-            kind
-            kubectl
-            kubernetes-helm
-            pre-commit
-            #pre-commit-hook-ensure-sops
-            rclone
-            yazi
+            kind # K8s in docker
+            pre-commit # Git pre-commit hooks
+            yazi # Filemanager
+            vals # configuration values loader 
 
             # Go
             go_1_20 # Go v1.20
@@ -111,10 +140,17 @@
             gopls # LSP
             gotools # Additional Tooling
 
+            # Kubernetes
+            k9s
+            kubectl
+            kubernetes-helm # Helm
+
+            # Rclone
+            rclone
+            macfuse-stubs # Fuse on MacOS
+
             # Nix
-            nil
-
-
+            nil # LSP
           ];
 
           shellHook = ''
@@ -134,8 +170,9 @@
         packages.csi-rclone-container = dockerImage;
         packages.startKindCluster = startKindCluster;
         packages.deployToKind = localDeployScript;
-
-
+        packages.initKind = initKindCluster;
+        packages.deleteKind = deleteKindCluster;
+        packages.getKubeconfig = getKindKubeconfig;
 
       });
 
