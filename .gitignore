@@ -4,3 +4,4 @@ rclone-build/
 .direnv/
 result
 kubeconfig
+.DS_Store
