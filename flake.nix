@@ -17,6 +17,9 @@
           CGO = 0;
         };
 
+        #myAppLinux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; });
+        #myAppLinux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; GOARCH = "arm64"; });
+
         dockerImage = pkgs.dockerTools.buildImage {
           name = "csi-rclone";
           tag = "latest";
@@ -28,11 +31,23 @@
           runAsRoot = ''
             #!${pkgs.runtimeShell}
             mkdir -p /tmp
+            mkdir -p /plugin
           '';
 
           copyToRoot = pkgs.buildEnv {
             name = "image-root";
-            paths = [ myApp pkgs.rclone ];
+
+            paths = [
+              myApp
+
+              pkgs.bashInteractive
+              pkgs.cacert
+              pkgs.coreutils
+              pkgs.fuse3
+              pkgs.gawk
+              pkgs.rclone
+            ];
+
             pathsToLink = [ "/bin" "/bin/linux_arm64" ];
           };
         };
@@ -79,21 +94,18 @@
         localDeployScript = pkgs.writeShellApplication {
           name = "local-deploy";
 
-          runtimeInputs = with pkgs; [ cowsay kubernetes-helm kubectl nix kubectl-convert ];
+          runtimeInputs = with pkgs; [ kubernetes-helm kubectl nix kubectl-convert ];
 
           text = ''
             echo "Building container image"
-            nix build --builders "ssh://eu.nixbuild.net aarch64-linux - 100 1 big-parallel,benchmark" .#csi-rclone-container
+            nix build .#packages.x86_64-linux.csi-rclone-container
 
             echo "Loading container image into kind"
             docker load < result
             kind load docker-image csi-rclone:latest  --name csi-rclone-k8s
 
-            echo "Installing chart"
-            #helm install csi-rclone deploy/helm_chart --namespace csi-rclone --create-namespace 
-
             echo "Render helm chart with new container version"
-            helm template csi-rclone deploy/helm_chart > devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml
+            helm template csi-rclone deploy/chart > devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml
 
             echo "Deploy to kind cluster"
             kubectl apply -f devenv/kind/deploy-kind
@@ -166,7 +178,7 @@
         };
 
         packages.csi-rclone-binary = myApp;
-        packages.csi-rclone-binary-linux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; GOARCH = "arm64"; });
+        #packages.csi-rclone-binary-linux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; GOARCH = "arm64"; });
         packages.csi-rclone-container = dockerImage;
         packages.startKindCluster = startKindCluster;
         packages.deployToKind = localDeployScript;
