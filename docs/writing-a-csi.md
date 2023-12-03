@@ -1,5 +1,7 @@
 # Writing a CSI
 
+[CSI overview Alibaba](https://www.alibabacloud.com/blog/get-to-know-container-storage-interface-csi_598094)
+
 - Use the CSI Test suite: [CSI Sanity](https://kubernetes-csi.github.io/docs/testing-drivers.html)
 - Use the [Sidecars](https://kubernetes-csi.github.io/docs/sidecar-containers.html) which make sense for your driver, but use them!
 - All operations need to be idempotant
@@ -9,8 +11,8 @@
 ## Phases
 
 1. Startup (Identity)
-    - `GetPluginCapabilities``
-    - `Probe`` - Are you still alive?
+    - `GetPluginCapabilities`
+    - `Probe` - Are you still alive?
 2. Create (Controller)
     - `CreateVolume` - User has requested a volume (PVC) -> which needs to be created
     - `ControllerPublishVolume` - Attach the volume to the required worker (eg. using the openstack api)
