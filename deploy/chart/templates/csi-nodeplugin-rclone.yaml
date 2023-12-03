@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "chart.fullname" . }}-nodeplugin
+  labels:
+  {{- include "chart.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: csi-nodeplugin-rclone
+    {{- include "chart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: csi-nodeplugin-rclone
+      {{- include "chart.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - args: {{- toYaml .Values.csiNodepluginRclone.nodeDriverRegistrar.args | nindent 8 }}
+        env:
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.csiNodepluginRclone.nodeDriverRegistrar.image.repository }}:{{
+          .Values.csiNodepluginRclone.nodeDriverRegistrar.image.tag | default .Chart.AppVersion
+          }}
+        imagePullPolicy: {{ .Values.csiNodepluginRclone.nodeDriverRegistrar.imagePullPolicy }}
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - rm -rf /registration/csi-rclone /registration/csi-rclone-reg.sock
+        name: node-driver-registrar
+        resources: {}
+        volumeMounts:
+        - mountPath: /plugin
+          name: plugin-dir
+        - mountPath: /registration
+          name: registration-dir
+      - args: {{- toYaml .Values.csiNodepluginRclone.rclone.args | nindent 8 }}
+        env:
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: CSI_ENDPOINT
+          value: {{ quote .Values.csiNodepluginRclone.rclone.env.csiEndpoint }}
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.csiNodepluginRclone.rclone.image.repository }}:{{ .Values.csiNodepluginRclone.rclone.image.tag | default .Chart.AppVersion }}
+        imagePullPolicy: {{ .Values.csiNodepluginRclone.rclone.imagePullPolicy }}
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - mount -t fuse.rclone | while read -r mount; do umount $(echo $mount | awk {print $3}) ; done
+        name: rclone
+        resources:
+          {{- toYaml .Values.csiControllerRclone.rclone.resources | nindent 12 }}
+        securityContext: {{- toYaml .Values.csiNodepluginRclone.rclone.containerSecurityContext
+          | nindent 10 }}
+        volumeMounts:
+        - mountPath: /plugin
+          name: plugin-dir
+        - mountPath: /var/lib/kubelet/pods
+          mountPropagation: Bidirectional
+          name: pods-mount-dir
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      serviceAccountName: {{ include "chart.fullname" . }}-nodeplugin
+      volumes:
+      - hostPath:
+          path: /var/lib/kubelet/plugins/csi-rclone
+          type: DirectoryOrCreate
+        name: plugin-dir
+      - hostPath:
+          path: /var/lib/kubelet/pods
+          type: Directory
+        name: pods-mount-dir
+      - hostPath:
+          path: /var/lib/kubelet/plugins_registry
+          type: DirectoryOrCreate
+        name: registration-dir

@@ -1,0 +1,76 @@
+csiControllerRclone:
+  csiAttacher:
+    args:
+    - --v=5
+    - --csi-address=$(ADDRESS)
+    - --leader-election
+    env:
+      address: /csi/csi.sock
+    image:
+      repository: k8s.gcr.io/sig-storage/csi-attacher
+      tag: v3.4.0
+    imagePullPolicy: IfNotPresent
+  rclone:
+    args:
+    - /bin/csi-rclone-plugin
+    - --nodeid=$(NODE_ID)
+    - --endpoint=$(CSI_ENDPOINT)
+    env:
+      csiEndpoint: unix://plugin/csi.sock
+    image:
+      repository: csi-rclone
+      tag: "latest"
+    imagePullPolicy: IfNotPresent
+    resources:
+      {}
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+      # requests:
+      #   cpu: 100m
+      #   memory: 128M
+  replicas: 1
+  serviceAccount:
+    annotations: {}
+ 
+
+csiNodepluginRclone:
+  nodeDriverRegistrar:
+    args:
+    - --v=5
+    - --csi-address=/plugin/csi.sock
+    - --kubelet-registration-path=/var/lib/kubelet/plugins/csi-rclone/csi.sock
+    image:
+      repository: k8s.gcr.io/sig-storage/csi-node-driver-registrar
+      tag: v2.4.0
+    imagePullPolicy: IfNotPresent
+  rclone:
+    args:
+    - /bin/csi-rclone-plugin
+    - --nodeid=$(NODE_ID)
+    - --endpoint=$(CSI_ENDPOINT)
+    containerSecurityContext:
+      allowPrivilegeEscalation: true
+      capabilities:
+        add:
+        - SYS_ADMIN
+      privileged: true
+    env:
+      csiEndpoint: unix://plugin/csi.sock
+    image:
+      #repository: wunderio/csi-rclone
+      #tag: v1.3.3
+      repository: csi-rclone
+      tag: "latest"
+    imagePullPolicy: IfNotPresent
+    resources:
+      {}
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+      # requests:
+      #   cpu: 100m
+      #   memory: 128M
+  serviceAccount:
+    annotations: {}
+kubernetesClusterDomain: cluster.local
