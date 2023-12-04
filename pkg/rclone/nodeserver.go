@@ -76,6 +76,10 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 	// Load default connection settings from secret
 	secret, e := getSecret("rclone-secret")
+	if e != nil {
+		klog.Warningf("getting secret error: %s", e)
+		return nil, e
+	}
 
 	remote, remotePath, configData, flags, e := extractFlags(req.GetVolumeContext(), secret)
 	if e != nil {
@@ -186,6 +190,10 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 	klog.Infof("NodeStageVolume: called with args %+v", *req)
 	return &csi.NodeStageVolumeResponse{}, nil
+}
+
+func (*nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method NodeExpandVolume not implemented")
 }
 
 func validateFlags(flags map[string]string) error {

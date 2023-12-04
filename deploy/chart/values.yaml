@@ -10,6 +10,16 @@ csiControllerRclone:
       repository: k8s.gcr.io/sig-storage/csi-attacher
       tag: v3.4.0
     imagePullPolicy: IfNotPresent
+  csiProvisioner:
+    args:
+    - --csi-address=$(ADDRESS)
+    - --capacity-ownerref-level=0
+    env:
+      address: /csi/csi.sock
+    image:
+      repository: registry.k8s.io/sig-storage/csi-provisioner
+      tag: v3.4.1
+    imagePullPolicy: IfNotPresent
   rclone:
     args:
     - /bin/csi-rclone-plugin

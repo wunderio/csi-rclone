@@ -29,6 +29,24 @@ spec:
         volumeMounts:
         - mountPath: /csi
           name: socket-dir
+      - args: {{- toYaml .Values.csiControllerRclone.csiProvisioner.args | nindent 8 }}
+        env:
+        - name: ADDRESS
+          value: {{ quote .Values.csiControllerRclone.csiProvisioner.env.address }}
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        image: {{ .Values.csiControllerRclone.csiProvisioner.image.repository }}:{{ .Values.csiControllerRclone.csiProvisioner.image.tag | default .Chart.AppVersion }}
+        imagePullPolicy: {{ .Values.csiControllerRclone.csiProvisioner.imagePullPolicy }}
+        name: csi-provisioner
+        volumeMounts:
+          - name: socket-dir
+            mountPath: /csi
       - args: {{- toYaml .Values.csiControllerRclone.rclone.args | nindent 8 }}
         env:
         - name: NODE_ID

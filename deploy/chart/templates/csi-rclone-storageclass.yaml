@@ -4,4 +4,5 @@ metadata:
   name: {{ include "chart.fullname" . }}
   labels:
   {{- include "chart.labels" . | nindent 4 }}
-provisioner: kubernetes.io/no-provisioner
+provisioner: csi-rclone
+volumeBindingMode: WaitForFirstConsumer
