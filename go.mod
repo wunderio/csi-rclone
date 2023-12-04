@@ -1,4 +1,4 @@
-module github.com/wunderio/csi-rclone
+module github.com/li-il-li/csi-rclone
 
 go 1.15
 
@@ -8,6 +8,7 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf // indirect
+	github.com/google/uuid v1.3.0
 	github.com/googleapis/gnostic v0.2.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190212212710-3befbb6ad0cc // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
@@ -42,6 +43,6 @@ require (
 	k8s.io/klog v0.2.0
 	k8s.io/kube-openapi v0.0.0-20190222203931-aa8624f5a2df // indirect
 	k8s.io/kubernetes v1.13.2
-	k8s.io/utils v0.0.0-20190221042446-c2654d5206da // indirect
+	k8s.io/utils v0.0.0-20190221042446-c2654d5206da
 	sigs.k8s.io/yaml v1.1.0 // indirect
 )

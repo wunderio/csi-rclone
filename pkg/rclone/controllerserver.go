@@ -2,10 +2,10 @@ package rclone
 
 import (
 	"fmt"
-	"os/exec"
-	"strings"
+	"os"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/google/uuid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -16,85 +16,95 @@ import (
 
 type controllerServer struct {
 	*csicommon.DefaultControllerServer
+	RcloneOps Operations
+}
+
+func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
+	if len(req.GetVolumeId()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "DeteleVolume must be provided volume id")
+	}
+	if len(req.GetVolumeCapabilities()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "CreateVolume without capabilities")
+	}
+	return &csi.ValidateVolumeCapabilitiesResponse{
+		Confirmed: &csi.ValidateVolumeCapabilitiesResponse_Confirmed{
+			VolumeContext:      req.VolumeContext,
+			VolumeCapabilities: req.VolumeCapabilities,
+			Parameters:         req.Parameters,
+		},
+	}, nil
+}
+
+func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ControllerPublishVolume not implemented")
+}
+
+func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ControllerUnpublishVolume not implemented")
 }
 
 func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
-	// Validate arguments
-	name := req.GetName()
-	if len(name) == 0 {
+	volumeName := req.GetName()
+	if len(volumeName) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume name must be provided")
 	}
 
-	// if err := cs.validateVolumeCapabilities(req.GetVolumeCapabilities()); err != nil {
-	// 	return nil, status.Error(codes.InvalidArgument, err.Error())
-	// }
-
-	reqCapacity := req.GetCapacityRange().GetRequiredBytes()
-
-	// Load default connection settings from secret
-	secret, e := getSecret("rclone-secret")
-	if e != nil {
-		klog.Warningf("getting secret error: %s", e)
-		return nil, e
+	if len(req.GetVolumeCapabilities()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "CreateVolume without capabilities")
 	}
 
-	remote, remotePath, flags, e := extractFlags(map[string]string{}, secret)
-	if e != nil {
-		klog.Warningf("storage parameter error: %s", e)
-		return nil, e
+	remote, remotePath, configData, flags, err := extractFlags(req.GetParameters(), req.GetSecrets())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "CreateVolume: %v", err)
+	}
+	rcloneConfPath, err := saveRcloneConf(configData)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "CreateVolume: %v", err)
+	}
+	defer os.Remove(rcloneConfPath)
+
+	if err = cs.RcloneOps.CreateVol(ctx, volumeName, remote, remotePath, rcloneConfPath, flags); err != nil {
+		klog.Errorf("error creating Volume: %s", err)
+		return nil, err
 	}
 
-	// Create subdirectory under base-dir
-	// TODO: revisit permissions
-	path := remotePath + "/" + name
-	e = rcloneCmd("mkdir", remote, path, flags)
-	if e != nil {
-		if strings.Contains(e.Error(), "invalid argument") {
-			return nil, status.Error(codes.InvalidArgument, e.Error())
-		}
-		return nil, status.Error(codes.Internal, e.Error())
-	}
-	// Remove capacity setting when provisioner 1.4.0 is available with fix for
-	// https://github.com/kubernetes-csi/external-provisioner/pull/271
-	return &csi.CreateVolumeResponse{Volume: &csi.Volume{
-		CapacityBytes: reqCapacity,
-		VolumeId:      remote + ":" + path,
-	}}, nil
+	return &csi.CreateVolumeResponse{
+		Volume: &csi.Volume{
+			CapacityBytes: req.GetCapacityRange().GetRequiredBytes(),
+			VolumeId:      uuid.New().String(),
+			VolumeContext: map[string]string{
+				"remote":     remote,
+				"remotePath": fmt.Sprintf("%s/%s", remotePath, volumeName),
+			},
+		},
+	}, nil
 }
 
 func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
-	// Validate arguments
-	volId := req.GetVolumeId()
-	if len(volId) == 0 {
+	if len(req.GetVolumeId()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "DeteleVolume must be provided volume id")
 	}
 
-	splitedVolId := strings.SplitN(volId, ":", 2)
-	remote, remotePath := splitedVolId[0], splitedVolId[1]
+	configData, flags := extractConfigData(req.GetSecrets())
+	rcloneConfPath, err := saveRcloneConf(configData)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "CreateVolume: %v", err)
+	}
+	defer os.Remove(rcloneConfPath)
 
-	// Load default connection settings from secret
-	secret, e := getSecret("rclone-secret")
-	if e != nil {
-		klog.Warningf("getting secret error: %s", e)
-		return nil, e
+	rcloneVol, err := cs.RcloneOps.GetVolumeById(ctx, req.GetVolumeId())
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	_, _, flags, e := extractFlags(map[string]string{}, secret)
-	if e != nil {
-		klog.Warningf("storage parameter error: %s", e)
-		return nil, e
+	err = cs.RcloneOps.DeleteVol(ctx, rcloneVol, rcloneConfPath, flags)
+	if err != nil {
+		klog.Errorf("error creating Volume: %s", err)
+		return nil, err
 	}
 
-	e = rcloneCmd("rmdirs", remote, remotePath, flags)
-	if e != nil {
-		if strings.Contains(e.Error(), "invalid argument") {
-			return nil, status.Error(codes.InvalidArgument, e.Error())
-		}
-		return nil, status.Error(codes.Internal, e.Error())
-	}
-	// Remove capacity setting when provisioner 1.4.0 is available with fix for
-	// https://github.com/kubernetes-csi/external-provisioner/pull/271
 	return &csi.DeleteVolumeResponse{}, nil
+
 }
 
 func (*controllerServer) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
@@ -107,27 +117,20 @@ func (cs *controllerServer) ControllerGetVolume(ctx context.Context, req *csi.Co
 	}}, nil
 }
 
-// single operand routine.
-func rcloneCmd(cmd, remote, remotePath string, flags map[string]string) error {
-	// rclone <operand> remote:path [flag]
-	args := append(
-		[]string{},
-		cmd,
-		fmt.Sprintf(":%s:%s", remote, remotePath),
-	)
-
-	// Add user supplied flags
-	for k, v := range flags {
-		args = append(args, fmt.Sprintf("--%s=%s", k, v))
-	}
-
-	klog.Infof("executing %s command cmd=rclone, remote=:%s:%s", cmd, remote, remotePath)
-
-	out, err := exec.Command("rclone", args...).CombinedOutput()
+func saveRcloneConf(configData string) (string, error) {
+	rcloneConf, err := os.CreateTemp("", "rclone.conf")
 	if err != nil {
-		return fmt.Errorf("%s failed: %v cmd: 'rclone' remote: ':%s:%s' output: %q",
-			cmd, err, remote, remotePath, string(out))
+		return "", err
 	}
 
-	return nil
+	if _, err = rcloneConf.Write([]byte(configData)); err != nil {
+		return "", err
+	}
+
+	if err = rcloneConf.Close(); err != nil {
+		return "", err
+	}
+	return rcloneConf.Name(), nil
 }
+
+// single operand routine.

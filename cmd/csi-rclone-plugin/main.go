@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"github.com/spf13/cobra"
-	"github.com/wunderio/csi-rclone/pkg/rclone"
+	"github.com/li-il-li/csi-rclone/pkg/kube"
+	"github.com/li-il-li/csi-rclone/pkg/rclone"
+	"os"
 )
 
 var (
@@ -60,6 +61,10 @@ Version:    %s
 }
 
 func handle() {
-	d := rclone.NewDriver(nodeID, endpoint)
+	kubeClient, err := kube.GetK8sClient()
+	if err != nil {
+		panic(err)
+	}
+	d := rclone.NewDriver(nodeID, endpoint, kubeClient)
 	d.Run()
 }
