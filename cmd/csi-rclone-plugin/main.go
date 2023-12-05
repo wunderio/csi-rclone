@@ -3,10 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/spf13/cobra"
+	"os"
+
 	"github.com/li-il-li/csi-rclone/pkg/kube"
 	"github.com/li-il-li/csi-rclone/pkg/rclone"
-	"os"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -20,23 +21,25 @@ func init() {
 
 func main() {
 
-	flag.CommandLine.Parse([]string{})
-
 	cmd := &cobra.Command{
 		Use:   "rclone",
 		Short: "CSI based rclone driver",
+	}
+
+	runCmd := &cobra.Command{
+		Use:   "run",
+		Short: "Start the CSI driver.",
 		Run: func(cmd *cobra.Command, args []string) {
 			handle()
 		},
 	}
+	cmd.AddCommand(runCmd)
 
-	cmd.Flags().AddGoFlagSet(flag.CommandLine)
+	runCmd.PersistentFlags().StringVar(&nodeID, "nodeid", "", "node id")
+	runCmd.MarkPersistentFlagRequired("nodeid")
 
-	cmd.PersistentFlags().StringVar(&nodeID, "nodeid", "", "node id")
-	cmd.MarkPersistentFlagRequired("nodeid")
-
-	cmd.PersistentFlags().StringVar(&endpoint, "endpoint", "", "CSI endpoint")
-	cmd.MarkPersistentFlagRequired("endpoint")
+	runCmd.PersistentFlags().StringVar(&endpoint, "endpoint", "", "CSI endpoint")
+	runCmd.MarkPersistentFlagRequired("endpoint")
 
 	versionCmd := &cobra.Command{
 		Use:   "version",
@@ -47,9 +50,7 @@ Version:    %s
 `, rclone.DriverVersion)
 		},
 	}
-
 	cmd.AddCommand(versionCmd)
-	versionCmd.ResetFlags()
 
 	cmd.ParseFlags(os.Args[1:])
 	if err := cmd.Execute(); err != nil {
