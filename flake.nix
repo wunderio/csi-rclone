@@ -10,10 +10,10 @@
         pkgs = nixpkgs.legacyPackages.${system};
 
         myApp = pkgs.buildGoModule {
-          pname = "csi-rclone";
+          pname = "csi-rclone-pvc";
           version = "1.0.0";
           src = ./.;
-          vendorSha256 = "sha256-V0DWAfnAHmpuFLn+/IIIO7qecidnvGSYTVOJ/3qAsMg=";
+          vendorSha256 = "sha256-tNksw8V9XoNWjpJ9ikT4ZIpPFRET7l2ZG6+DgQrdRHs=";
           CGO = 0;
         };
 
@@ -151,6 +151,13 @@
             golangci-lint # Linter
             gopls # LSP
             gotools # Additional Tooling
+            # VSCode GO: https://mgdm.net/weblog/vscode-nix-go-tools/
+            go-outline
+            gocode
+            gopkgs
+            gocode-gomod
+            godef
+            golint
 
             # Kubernetes
             k9s
