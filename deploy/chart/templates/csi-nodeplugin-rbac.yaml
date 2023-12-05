@@ -31,6 +31,29 @@ rules:
   verbs:
   - get
   - list
+  - create
+  - delete
+- apiGroups:
+  - ""
+  resources: 
+  - pods
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - deploy
+  - deployment
+  verbs: 
+  - get
+  - list
+  - create
+  - delete
+  - watch
+  - patch
+  - update
 - apiGroups:
   - ""
   resources:

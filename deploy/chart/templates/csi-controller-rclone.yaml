@@ -15,6 +15,7 @@ spec:
       labels:
         app: csi-controller-rclone
     spec:
+      serviceAccountName: {{ include "chart.fullname" . }}-controller
       containers:
       - args: {{- toYaml .Values.csiControllerRclone.csiAttacher.args | nindent 8 }}
         env:
@@ -65,7 +66,6 @@ spec:
         volumeMounts:
         - mountPath: /plugin
           name: socket-dir
-      serviceAccountName: {{ include "chart.fullname" . }}-controller
       volumes:
       - emptyDir: {}
         name: socket-dir

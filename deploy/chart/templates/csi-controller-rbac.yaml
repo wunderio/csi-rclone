@@ -31,6 +31,7 @@ rules:
   verbs:
   - "get"
   - "list"
+  - "create" # TODO: check if necessary
 - apiGroups:
   - ""
   resources:
@@ -47,6 +48,15 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - volumeattachments
+  verbs:
+  - get
+  - list
+  - watch
+  - update
 - apiGroups:
   - storage.k8s.io
   resources:

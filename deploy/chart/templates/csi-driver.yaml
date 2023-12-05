@@ -6,4 +6,7 @@ metadata:
   {{- include "chart.labels" . | nindent 4 }}
 spec:
   attachRequired: true
-  podInfoOnMount: false
+  podInfoOnMount: false  # are we sure about this?
+  volumeLifecycleModes:
+    - Persistent
+    - Ephemeral
