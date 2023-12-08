@@ -8,17 +8,39 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        containerPkgs = import nixpkgs { localSystem = system; crossSystem = "x86_64-linux"; };
 
         myApp = pkgs.buildGoModule {
-          pname = "csi-rclone-pvc";
+          pname = "csi-rclone-pvc-1";
           version = "1.0.0";
           src = ./.;
-          vendorSha256 = "sha256-tNksw8V9XoNWjpJ9ikT4ZIpPFRET7l2ZG6+DgQrdRHs=";
+          vendorSha256 = "sha256-ZoBRdJunTcpy1OhAUxpmlIFfR3rBUPV/GN0bdT1ONMo=";
           CGO = 0;
         };
 
         #myAppLinux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; });
         #myAppLinux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; GOARCH = "arm64"; });
+        dockerLayerdImage = pkgs.dockerTools.streamLayeredImage {
+          name = "csi-rclone";
+          tag = "latest";
+          architecture = "amd64";
+
+          contents = [
+            myApp
+
+            containerPkgs.bashInteractive
+            containerPkgs.cacert
+            containerPkgs.coreutils
+            containerPkgs.fuse3
+            containerPkgs.gawk
+            containerPkgs.rclone
+          ];
+
+          fakeRootCommands = ''
+            sudo mkdir -p /tmp
+            sudo mkdir -p /plugin
+          '';
+        };
 
         dockerImage = pkgs.dockerTools.buildImage {
           name = "csi-rclone";
@@ -114,6 +136,26 @@
           '';
         };
 
+        reloadScript = pkgs.writeShellApplication {
+          name = "reload";
+
+          runtimeInputs = with pkgs; [ kubernetes-helm kubectl nix kubectl-convert ];
+
+          text = ''
+            echo "Building container image"
+            nix build .#csi-rclone-container-layerd | docker load
+
+            echo "Loading container image into kind"
+            kind load docker-image csi-rclone:latest  --name csi-rclone-k8s
+
+            echo "Restart Node and Controller"
+            kubectl rollout restart statefulset csi-rclone-controller -n default
+            kubectl rollout restart daemonset csi-rclone-nodeplugin -n default
+
+            echo "Done"
+          '';
+        };
+
         config = {
           repos = [
             {
@@ -187,8 +229,10 @@
         packages.csi-rclone-binary = myApp;
         #packages.csi-rclone-binary-linux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; GOARCH = "arm64"; });
         packages.csi-rclone-container = dockerImage;
+        packages.csi-rclone-container-layerd = dockerLayerdImage;
         packages.startKindCluster = startKindCluster;
         packages.deployToKind = localDeployScript;
+        packages.reload = reloadScript;
         packages.initKind = initKindCluster;
         packages.deleteKind = deleteKindCluster;
         packages.getKubeconfig = getKindKubeconfig;
