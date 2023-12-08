@@ -23,6 +23,7 @@ csiControllerRclone:
   rclone:
     args:
     - /bin/csi-rclone-plugin
+    - run
     - --nodeid=$(NODE_ID)
     - --endpoint=$(CSI_ENDPOINT)
     env:
@@ -57,6 +58,7 @@ csiNodepluginRclone:
   rclone:
     args:
     - /bin/csi-rclone-plugin
+    - run
     - --nodeid=$(NODE_ID)
     - --endpoint=$(CSI_ENDPOINT)
     containerSecurityContext:
