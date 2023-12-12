@@ -14,19 +14,21 @@
           pname = "csi-rclone-pvc-1";
           version = "1.0.0";
           src = ./.;
-          vendorSha256 = "sha256-ZoBRdJunTcpy1OhAUxpmlIFfR3rBUPV/GN0bdT1ONMo=";
+          #vendorSha256 = "sha256-ZoBRdJunTcpy1OhAUxpmlIFfR3rBUPV/GN0bdT1ONMo=";
+          vendorSha256 = "sha256-yWcNzi2ZeE47eSfCtmCRfMuLtbCfZ7raOHq3PcgBldc=";
           CGO = 0;
         };
 
-        #myAppLinux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; });
+        myAppLinux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; });
         #myAppLinux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; GOARCH = "arm64"; });
+
         dockerLayerdImage = pkgs.dockerTools.streamLayeredImage {
           name = "csi-rclone";
           tag = "latest";
           architecture = "amd64";
 
           contents = [
-            myApp
+            myAppLinux
 
             containerPkgs.bashInteractive
             containerPkgs.cacert
@@ -36,10 +38,11 @@
             containerPkgs.rclone
           ];
 
-          fakeRootCommands = ''
-            sudo mkdir -p /tmp
-            sudo mkdir -p /plugin
+          extraCommands = ''
+            mkdir -p ./plugin
+            mkdir -p ./tmp
           '';
+
         };
 
         dockerImage = pkgs.dockerTools.buildImage {
@@ -120,17 +123,18 @@
 
           text = ''
             echo "Building container image"
-            nix build .#packages.x86_64-linux.csi-rclone-container
+            nix build .#csi-rclone-container-layerd && ./result | docker load
 
             echo "Loading container image into kind"
-            docker load < result
             kind load docker-image csi-rclone:latest  --name csi-rclone-k8s
 
             echo "Render helm chart with new container version"
-            helm template csi-rclone deploy/chart > devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml
+            helm template -n csi-rclone csi-rclone deploy/chart > devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml
+
+            # TODO: use tee
 
             echo "Deploy to kind cluster"
-            kubectl apply -f devenv/kind/deploy-kind
+            envsubst < devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml | kubectl apply -f -
 
             echo "Done"
           '';
@@ -143,7 +147,7 @@
 
           text = ''
             echo "Building container image"
-            nix build .#csi-rclone-container-layerd | docker load
+            nix build .#csi-rclone-container-layerd && ./result | docker load
 
             echo "Loading container image into kind"
             kind load docker-image csi-rclone:latest  --name csi-rclone-k8s
@@ -183,8 +187,10 @@
           packages = with pkgs; [
             # DevTools
             bashInteractive
+            envsubst
             kind # K8s in docker
             pre-commit # Git pre-commit hooks
+            sops
             yazi # Filemanager
             vals # configuration values loader 
 
@@ -219,7 +225,11 @@
             export CLUSTER_NAME="csi-rclone-k8s"
             export KUBECONFIG="$PROJECT_ROOT/devenv/kind/kubeconfig"
             export RCLONE_CONFIG=$PROJECT_ROOT/devenv/local-s3/switch-engine-ceph-rclone-config.conf
+            
+            # Load secrets as ENVs
+            eval "$("$direnv" dotenv bash <(sops -d .env))"
 
+            # Setup .githooks
             ${((nix-pre-commit.lib.${system}.mkConfig {
               inherit pkgs config;
             }).shellHook)}
@@ -227,7 +237,7 @@
         };
 
         packages.csi-rclone-binary = myApp;
-        #packages.csi-rclone-binary-linux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; GOARCH = "arm64"; });
+        packages.csi-rclone-binary-linux = myAppLinux;
         packages.csi-rclone-container = dockerImage;
         packages.csi-rclone-container-layerd = dockerLayerdImage;
         packages.startKindCluster = startKindCluster;
