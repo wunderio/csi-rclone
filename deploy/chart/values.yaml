@@ -1,3 +1,6 @@
+namespace:
+  enabled: true
+
 csiControllerRclone:
   csiAttacher:
     args:
@@ -22,7 +25,7 @@ csiControllerRclone:
     imagePullPolicy: IfNotPresent
   rclone:
     args:
-    - /bin/csi-rclone-plugin
+    - /bin/linux_amd64/csi-rclone-plugin
     - run
     - --nodeid=$(NODE_ID)
     - --endpoint=$(CSI_ENDPOINT)
@@ -57,7 +60,7 @@ csiNodepluginRclone:
     imagePullPolicy: IfNotPresent
   rclone:
     args:
-    - /bin/csi-rclone-plugin
+    - /bin/linux_amd64/csi-rclone-plugin
     - run
     - --nodeid=$(NODE_ID)
     - --endpoint=$(CSI_ENDPOINT)

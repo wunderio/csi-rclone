@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ include "chart.fullname" . }}-controller
+  namespace: {{ .Release.Namespace }}
   labels:
   {{- include "chart.labels" . | nindent 4 }}
   annotations:
@@ -100,7 +101,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: '{{ include "chart.fullname" . }}-controller'
-  namespace: '{{ .Release.Namespace }}'
+  namespace: {{ .Release.Namespace }}
 
 ---
 kind: ClusterRole
@@ -222,7 +223,7 @@ kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: {{ include "chart.fullname" . }}-external-provisioner-cfg
-  namespace: '{{ .Release.Namespace }}'
+  namespace: {{ .Release.Namespace }}
 rules:
 # Only one of the following rules for endpoints or leases is required based on
 # what is set for `--leader-election-type`. Endpoints are deprecated in favor of Leases.
@@ -282,7 +283,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: {{ include "chart.fullname" . }}-controller
-    namespace: '{{ .Release.Namespace }}'
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
   name: {{ include "chart.fullname" . }}-external-provisioner-cfg
