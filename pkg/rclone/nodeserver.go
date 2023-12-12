@@ -1,4 +1,9 @@
+// Node(Server) takes charge of volume mounting and unmounting.
+
 package rclone
+
+// Restructure this file !!!
+// Follow lifecycle
 
 import (
 	"errors"
@@ -30,6 +35,20 @@ type nodeServer struct {
 // 	MountPath string
 // }
 
+// Mounting Volume (1)
+// Something like the init() for NodePublishVolume
+// Called by kubelet (csiAttacher) through Unix domain socket
+func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method NodeStageVolume not implemented")
+}
+
+func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method NodeUnstageVolume not implemented")
+}
+
+// Mounting Volume (2)
+// prepares and equips a volume on a specific node to be used by a workload
+// Called by kubelet (csiAttacher) through Unix domain socket
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
 	klog.Infof("NodePublishVolume: called with args %+v", *req)
 	if err := validatePublishVolumeRequest(req); err != nil {
@@ -89,45 +108,19 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func (ns *nodeServer) WaitForMountAvailable(mountpoint string) error {
-	for {
-		select {
-		case <-time.After(100 * time.Millisecond):
-			notMnt, _ := ns.mounter.IsLikelyNotMountPoint(mountpoint)
-			if !notMnt {
-				return nil
-			}
-		case <-time.After(1 * time.Minute):
-			return errors.New("wait for mount available timeout")
-		}
+func validatePublishVolumeRequest(req *csi.NodePublishVolumeRequest) error {
+	if req.GetVolumeId() == "" {
+		return status.Error(codes.InvalidArgument, "empty volume id")
 	}
-}
 
-func validateFlags(flags map[string]string) error {
-	if _, ok := flags["remote"]; !ok {
-		return status.Errorf(codes.InvalidArgument, "missing volume context value: remote")
+	if req.GetTargetPath() == "" {
+		return status.Error(codes.InvalidArgument, "empty target path")
 	}
-	if _, ok := flags["remotePath"]; !ok {
-		return status.Errorf(codes.InvalidArgument, "missing volume context value: remotePath")
+
+	if req.GetVolumeCapability() == nil {
+		return status.Error(codes.InvalidArgument, "no volume capability set")
 	}
 	return nil
-}
-
-func extractConfigData(parameters map[string]string) (string, map[string]string) {
-	flags := make(map[string]string)
-	for k, v := range parameters {
-		flags[k] = v
-	}
-	var configData string
-	var ok bool
-	if configData, ok = flags["configData"]; ok {
-		delete(flags, "configData")
-	}
-
-	delete(flags, "remote")
-	delete(flags, "remotePath")
-
-	return configData, flags
 }
 
 func extractFlags(volumeContext map[string]string, secret map[string]string) (string, string, string, map[string]string, error) {
@@ -171,33 +164,49 @@ func extractFlags(volumeContext map[string]string, secret map[string]string) (st
 	return remote, remotePath, configData, flags, nil
 }
 
-func validatePublishVolumeRequest(req *csi.NodePublishVolumeRequest) error {
-	if req.GetVolumeId() == "" {
-		return status.Error(codes.InvalidArgument, "empty volume id")
+func validateFlags(flags map[string]string) error {
+	if _, ok := flags["remote"]; !ok {
+		return status.Errorf(codes.InvalidArgument, "missing volume context value: remote")
 	}
-
-	if req.GetTargetPath() == "" {
-		return status.Error(codes.InvalidArgument, "empty target path")
-	}
-
-	if req.GetVolumeCapability() == nil {
-		return status.Error(codes.InvalidArgument, "no volume capability set")
+	if _, ok := flags["remotePath"]; !ok {
+		return status.Errorf(codes.InvalidArgument, "missing volume context value: remotePath")
 	}
 	return nil
 }
 
-func validateUnPublishVolumeRequest(req *csi.NodeUnpublishVolumeRequest) error {
-	if req.GetVolumeId() == "" {
-		return status.Error(codes.InvalidArgument, "empty volume id")
+func extractConfigData(parameters map[string]string) (string, map[string]string) {
+	flags := make(map[string]string)
+	for k, v := range parameters {
+		flags[k] = v
+	}
+	var configData string
+	var ok bool
+	if configData, ok = flags["configData"]; ok {
+		delete(flags, "configData")
 	}
 
-	if req.GetTargetPath() == "" {
-		return status.Error(codes.InvalidArgument, "empty target path")
-	}
+	delete(flags, "remote")
+	delete(flags, "remotePath")
 
-	return nil
+	return configData, flags
 }
 
+func (ns *nodeServer) WaitForMountAvailable(mountpoint string) error {
+	for {
+		select {
+		case <-time.After(100 * time.Millisecond):
+			notMnt, _ := ns.mounter.IsLikelyNotMountPoint(mountpoint)
+			if !notMnt {
+				return nil
+			}
+		case <-time.After(1 * time.Minute):
+			return errors.New("wait for mount available timeout")
+		}
+	}
+}
+
+// Unmounting Volumes
+// Called by kubelet (csiAttacher) through Unix domain socket
 func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 	klog.Infof("NodeUnPublishVolume: called with args %+v", *req)
 	if err := validateUnPublishVolumeRequest(req); err != nil {
@@ -220,14 +229,19 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
+func validateUnPublishVolumeRequest(req *csi.NodeUnpublishVolumeRequest) error {
+	if req.GetVolumeId() == "" {
+		return status.Error(codes.InvalidArgument, "empty volume id")
+	}
+
+	if req.GetTargetPath() == "" {
+		return status.Error(codes.InvalidArgument, "empty target path")
+	}
+
+	return nil
+}
+
+// Resizing Volume
 func (*nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method NodeExpandVolume not implemented")
-}
-
-func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method NodeUnstageVolume not implemented")
-}
-
-func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method NodeStageVolume not implemented")
 }

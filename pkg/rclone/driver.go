@@ -20,9 +20,12 @@ type Driver struct {
 
 var (
 	DriverName    = "csi-rclone"
-	DriverVersion = "latest"
+	DriverVersion = "dario"
 )
 
+// TODO: check where its running, only enable NodeServer when run as daemonset
+// and Controler when run in the statefulset
+// make it based on a flag, it is easy
 func NewDriver(nodeID, endpoint string, kubeClient *kubernetes.Clientset) *Driver {
 	klog.Infof("Starting new %s RcloneDriver in version %s", DriverName, DriverVersion)
 
@@ -44,6 +47,7 @@ func NewDriver(nodeID, endpoint string, kubeClient *kubernetes.Clientset) *Drive
 
 func NewNodeServer(d *Driver) *nodeServer {
 	return &nodeServer{
+		// Creating and passing the NewDefaultNodeServer is useless and unecessary
 		DefaultNodeServer: csicommon.NewDefaultNodeServer(d.csiDriver),
 		mounter: &mount.SafeFormatAndMount{
 			Interface: mount.New(""),
@@ -55,6 +59,7 @@ func NewNodeServer(d *Driver) *nodeServer {
 
 func NewControllerServer(d *Driver) *controllerServer {
 	return &controllerServer{
+		// Creating and passing the NewDefaultControllerServer is useless and unecessary
 		DefaultControllerServer: csicommon.NewDefaultControllerServer(d.csiDriver),
 		RcloneOps:               d.rcloneOps,
 	}
