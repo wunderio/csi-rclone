@@ -1,6 +1,12 @@
 # Writing a CSI
 
 [CSI overview Alibaba](https://www.alibabacloud.com/blog/get-to-know-container-storage-interface-csi_598094)
+[How to write a CSI](https://arslan.io/2018/06/21/how-to-write-a-container-storage-interface-csi-plugin/)
+[Kubernetes Docs Volumes CSI](https://kubernetes.io/docs/concepts/storage/volumes/#csi)
+[gRPC over UDS](https://www.mpi-hd.mpg.de/personalhomes/fwerner/research/2021/09/grpc-for-ipc/)
+[GRPC in Go](https://www.youtube.com/watch?v=BdzYdN_Zd9Q&t=31s)
+[Youtube Playlist on writing a CSI from scratch (didn't watch but looks good)](https://www.youtube.com/playlist?list=PLh4KH3LtJvRSAQsRLNLMDu6hd1uh6ZMoR)
+[Specification](https://github.com/container-storage-interface/spec/blob/master/spec.md)
 
 - Use the CSI Test suite: [CSI Sanity](https://kubernetes-csi.github.io/docs/testing-drivers.html)
 - Use the [Sidecars](https://kubernetes-csi.github.io/docs/sidecar-containers.html) which make sense for your driver, but use them!
