@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/kubernetes-csi/csi-test/pkg/sanity"
 	"github.com/li-il-li/csi-rclone/pkg/kube"
 	"github.com/li-il-li/csi-rclone/pkg/rclone"
-	"github.com/kubernetes-csi/csi-test/pkg/sanity"
 )
 
 func TestMyDriver(t *testing.T) {

@@ -30,14 +30,7 @@ type nodeServer struct {
 	RcloneOps Operations
 }
 
-// type mountPoint struct {
-// 	VolumeId  string
-// 	MountPath string
-// }
-
-// Mounting Volume (1)
-// Something like the init() for NodePublishVolume
-// Called by kubelet (csiAttacher) through Unix domain socket
+// Mounting Volume (Preparation)
 func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method NodeStageVolume not implemented")
 }
@@ -46,9 +39,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	return nil, status.Errorf(codes.Unimplemented, "method NodeUnstageVolume not implemented")
 }
 
-// Mounting Volume (2)
-// prepares and equips a volume on a specific node to be used by a workload
-// Called by kubelet (csiAttacher) through Unix domain socket
+// Mounting Volume (Actual Mounting)
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
 	klog.Infof("NodePublishVolume: called with args %+v", *req)
 	if err := validatePublishVolumeRequest(req); err != nil {
@@ -206,7 +197,6 @@ func (ns *nodeServer) WaitForMountAvailable(mountpoint string) error {
 }
 
 // Unmounting Volumes
-// Called by kubelet (csiAttacher) through Unix domain socket
 func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 	klog.Infof("NodeUnPublishVolume: called with args %+v", *req)
 	if err := validateUnPublishVolumeRequest(req); err != nil {

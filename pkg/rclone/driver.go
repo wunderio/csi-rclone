@@ -23,9 +23,6 @@ var (
 	DriverVersion = "dario"
 )
 
-// TODO: check where its running, only enable NodeServer when run as daemonset
-// and Controler when run in the statefulset
-// make it based on a flag, it is easy
 func NewDriver(nodeID, endpoint string, kubeClient *kubernetes.Clientset) *Driver {
 	klog.Infof("Starting new %s RcloneDriver in version %s", DriverName, DriverVersion)
 
