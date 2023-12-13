@@ -153,8 +153,8 @@
             kind load docker-image csi-rclone:latest  --name csi-rclone-k8s
 
             echo "Restart Node and Controller"
-            kubectl rollout restart statefulset csi-rclone-controller -n default
-            kubectl rollout restart daemonset csi-rclone-nodeplugin -n default
+            kubectl rollout restart statefulset csi-rclone-controller -n csi-rclone
+            kubectl rollout restart daemonset csi-rclone-nodeplugin -n csi-rclone
 
             echo "Done"
           '';
