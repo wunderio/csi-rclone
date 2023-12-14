@@ -547,7 +547,7 @@ spec:
         - mountPath: /registration
           name: registration-dir
       - args:
-        - /bin/linux_amd64/csi-rclone-plugin
+        - /bin/csi-rclone-plugin
         - run
         - --nodeid=$(NODE_ID)
         - --endpoint=$(CSI_ENDPOINT)
@@ -665,7 +665,7 @@ spec:
           - name: socket-dir
             mountPath: /csi
       - args:
-        - /bin/linux_amd64/csi-rclone-plugin
+        - /bin/csi-rclone-plugin
         - run
         - --nodeid=$(NODE_ID)
         - --endpoint=$(CSI_ENDPOINT)
