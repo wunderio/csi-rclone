@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/li-il-li/csi-rclone/pkg/kube"
-	"github.com/li-il-li/csi-rclone/pkg/rclone"
+	"github.com/SwissDataScienceCenter/csi-rclone/pkg/kube"
+	"github.com/SwissDataScienceCenter/csi-rclone/pkg/rclone"
 	"github.com/spf13/cobra"
 )
 

@@ -114,3 +114,14 @@ make push
 ## Changelog
 
 See [CHANGELOG.txt](CHANGELOG.txt)
+
+## Dev Environment
+This repo uses `nix` for the dev environment.
+
+Ensure that `nix`, `direnv` and `nix-direnv` are installed.
+Also add the following to your nix.conf:
+```
+experimental-features = nix-command flakes
+```
+then commands can be run like e.g. `nix run '.#initKind'`. Check `flakes.nix` 
+for all available commands.

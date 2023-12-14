@@ -1,4 +1,4 @@
-module github.com/li-il-li/csi-rclone
+module github.com/SwissDataScienceCenter/csi-rclone
 
 go 1.18
 
