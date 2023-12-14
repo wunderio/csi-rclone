@@ -1,5 +1,9 @@
 { pkgs }:
-
+let
+  optionalPkgs = with pkgs; if stdenv.isDarwin then [
+    macfuse-stubs
+  ] else [];
+in
 pkgs.mkShell {
   packages = with pkgs; [
     # DevTools
@@ -30,12 +34,11 @@ pkgs.mkShell {
 
     # Rclone
     rclone
-    macfuse-stubs # Fuse on MacOS
 
     # Nix
     nil # LSP
     nixfmt # Formatter
-  ];
+  ] ++ optionalPkgs;
 
   shellHook = ''
     export PROJECT_ROOT="$(pwd)"
