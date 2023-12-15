@@ -484,8 +484,8 @@ func (r *Rclone) command(cmd, remote, remotePath string, flags map[string]string
 	klog.Infof("executing %s command cmd=rclone, remote=%s:%s", cmd, remote, remotePath)
 	out, err := r.execute.Command("rclone", args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s failed: %v cmd: 'rclone' remote: ':%s:%s' output: %q",
-			cmd, err, remote, remotePath, string(out))
+		return fmt.Errorf("%s failed: %v cmd: 'rclone' remote: '%s' remotePath:'%s' args:'%s' config:'%s' output: %q",
+			cmd, err, remote, remotePath, args, string(out))
 	}
 
 	return nil
