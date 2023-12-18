@@ -445,7 +445,12 @@ func (r Rclone) GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolu
 					}
 				}
 			}
-			remote, path, _, _, err = extractFlags(pv.Spec.CSI.VolumeAttributes, secrets)
+
+			pvcSecret, err := GetPvcSecret(pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name)
+			if err != nil {
+				return nil, err
+			}
+			remote, path, _, _, err = extractFlags(pv.Spec.CSI.VolumeAttributes, secrets, pvcSecret)
 			if err != nil {
 				return nil, err
 			}

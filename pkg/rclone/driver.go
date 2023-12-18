@@ -20,7 +20,7 @@ type Driver struct {
 
 var (
 	DriverName    = "csi-rclone"
-	DriverVersion = "dario"
+	DriverVersion = "SwissDataScienceCenter"
 )
 
 func NewDriver(nodeID, endpoint string, kubeClient *kubernetes.Clientset) *Driver {

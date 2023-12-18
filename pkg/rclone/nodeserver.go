@@ -12,8 +12,11 @@ import (
 	"strings"
 	"time"
 
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog"
 
+	"github.com/SwissDataScienceCenter/csi-rclone/pkg/kube"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
@@ -23,6 +26,8 @@ import (
 
 	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 )
+
+const CSI_ANNOTATION_PREFIX = "csi-rclone.dev/"
 
 type nodeServer struct {
 	*csicommon.DefaultNodeServer
@@ -48,12 +53,19 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 	targetPath := req.GetTargetPath()
 	volumeId := req.GetVolumeId()
-	remote, remotePath, configData, flags, e := extractFlags(req.GetVolumeContext(), req.GetSecrets())
+	volumeContext := req.GetVolumeContext()
+	pvcName := volumeContext["pvcName"]
+	pvcNamespace := volumeContext["pvcNamespace"]
+
+	pvcSecret, err := GetPvcSecret(pvcNamespace, pvcName)
+	if err != nil {
+		return nil, err
+	}
+	remote, remotePath, configData, flags, e := extractFlags(req.GetVolumeContext(), req.GetSecrets(), pvcSecret)
 	if e != nil {
 		klog.Warningf("storage parameter error: %s", e)
 		return nil, e
 	}
-
 	notMnt, err := ns.mounter.IsLikelyNotMountPoint(targetPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -99,6 +111,31 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
+func GetPvcSecret(pvcNamespace string, pvcName string) (*v1.Secret, error) {
+	cs, err := kube.GetK8sClient()
+	if pvcName == "" || pvcNamespace == "" {
+		return nil, nil
+	}
+	pvc, err := cs.CoreV1().PersistentVolumeClaims(pvcNamespace).Get(pvcName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var pvcSecret *v1.Secret
+	if pvc != nil {
+		annotations := pvc.GetAnnotations()
+		if len(annotations) > 0 {
+			if v, found := annotations[CSI_ANNOTATION_PREFIX+"secret-name"]; found {
+				pvcSecret, err = cs.CoreV1().Secrets(pvcNamespace).Get(v, metav1.GetOptions{})
+				if err != nil {
+					return nil, err
+				}
+			}
+
+		}
+	}
+	return pvcSecret, nil
+}
+
 func validatePublishVolumeRequest(req *csi.NodePublishVolumeRequest) error {
 	if req.GetVolumeId() == "" {
 		return status.Error(codes.InvalidArgument, "empty volume id")
@@ -114,7 +151,7 @@ func validatePublishVolumeRequest(req *csi.NodePublishVolumeRequest) error {
 	return nil
 }
 
-func extractFlags(volumeContext map[string]string, secret map[string]string) (string, string, string, map[string]string, error) {
+func extractFlags(volumeContext map[string]string, secret map[string]string, pvcSecret *v1.Secret) (string, string, string, map[string]string, error) {
 
 	// Empty argument list
 	flags := make(map[string]string)
@@ -135,6 +172,13 @@ func extractFlags(volumeContext map[string]string, secret map[string]string) (st
 				continue
 			}
 			flags[k] = v
+		}
+	}
+	if pvcSecret != nil {
+		if len(pvcSecret.StringData) > 0 {
+			for k, v := range pvcSecret.StringData {
+				flags[k] = v
+			}
 		}
 	}
 

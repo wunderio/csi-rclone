@@ -3,15 +3,15 @@
 package rclone
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/google/uuid"
+	// "github.com/google/uuid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/klog"
+
+	// "k8s.io/klog"
 
 	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 )
@@ -58,31 +58,20 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume without capabilities")
 	}
 
-	remote, remotePath, configData, flags, err := extractFlags(req.GetParameters(), req.GetSecrets())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "CreateVolume: %v", err)
-	}
-	rcloneConfPath, err := saveRcloneConf(configData)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "CreateVolume: %v", err)
-	}
-	defer os.Remove(rcloneConfPath)
-
-	if err = cs.RcloneOps.CreateVol(ctx, volumeName, remote, remotePath, rcloneConfPath, flags); err != nil {
-		klog.Errorf("error creating Volume: %s", err)
-		return nil, err
-	}
-
+	pvcName := req.Parameters["csi.storage.k8s.io/pvc/name"]
+	ns := req.Parameters["csi.storage.k8s.io/pvc/namespace"]
+	// NOTE: We need the PVC name and namespace when mounting the volume, not here
+	// that is why they are passed to the VolumeContext
 	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
-			CapacityBytes: req.GetCapacityRange().GetRequiredBytes(),
-			VolumeId:      uuid.New().String(),
+			VolumeId: volumeName,
 			VolumeContext: map[string]string{
-				"remote":     remote,
-				"remotePath": fmt.Sprintf("%s/%s", remotePath, volumeName),
+				"pvcName":      pvcName,
+				"pvcNamespace": ns,
 			},
 		},
 	}, nil
+
 }
 
 // Delete Volume
@@ -91,26 +80,7 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		return nil, status.Error(codes.InvalidArgument, "DeteleVolume must be provided volume id")
 	}
 
-	configData, flags := extractConfigData(req.GetSecrets())
-	rcloneConfPath, err := saveRcloneConf(configData)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "CreateVolume: %v", err)
-	}
-	defer os.Remove(rcloneConfPath)
-
-	rcloneVol, err := cs.RcloneOps.GetVolumeById(ctx, req.GetVolumeId())
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	err = cs.RcloneOps.DeleteVol(ctx, rcloneVol, rcloneConfPath, flags)
-	if err != nil {
-		klog.Errorf("error creating Volume: %s", err)
-		return nil, err
-	}
-
 	return &csi.DeleteVolumeResponse{}, nil
-
 }
 
 func (*controllerServer) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
