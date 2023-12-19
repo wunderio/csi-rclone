@@ -93,6 +93,10 @@ func (cs *controllerServer) ControllerGetVolume(ctx context.Context, req *csi.Co
 	}}, nil
 }
 
+func (cs *controllerServer) ControllerModifyVolume(ctx context.Context, req *csi.ControllerModifyVolumeRequest) (*csi.ControllerModifyVolumeResponse, error) {
+	return &csi.ControllerModifyVolumeResponse{}, nil
+}
+
 func saveRcloneConf(configData string) (string, error) {
 	rcloneConf, err := os.CreateTemp("", "rclone.conf")
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/SwissDataScienceCenter/csi-rclone/pkg/kube"
 	"github.com/SwissDataScienceCenter/csi-rclone/pkg/rclone"
-	"github.com/kubernetes-csi/csi-test/pkg/sanity"
+	"github.com/kubernetes-csi/csi-test/v5/pkg/sanity"
 )
 
 func TestMyDriver(t *testing.T) {
@@ -45,25 +45,25 @@ func TestMyDriver(t *testing.T) {
 	os.Getwd()
 	os.RemoveAll(mntStageDir)
 	//defer os.RemoveAll(mntStageDir)
-	cfg := &sanity.Config{
+	cfg := sanity.NewTestConfig()
+	cfg.Address = endpoint
 
-		TargetPath:  mntDir,
-		StagingPath: mntStageDir,
-		Address:     endpoint,
-		SecretsFile: "testdata/secrets.yaml",
-		TestVolumeParameters: map[string]string{
-			"remote":     "my-s3",
-			"remotePath": "giab",
-			"configData": `[my-s3]
+	cfg.TargetPath = mntDir
+	cfg.StagingPath = mntStageDir
+	cfg.Address = endpoint
+	cfg.SecretsFile = "testdata/secrets.yaml"
+	cfg.TestVolumeParameters = map[string]string{
+		"remote":     "my-s3",
+		"remotePath": "giab",
+		"configData": `[my-s3]
 				type=s3
 				provider=AWS`,
-			// "csi.storage.k8s.io/provisioner-secret-name":             "rclone-secret",
-			// "csi.storage.k8s.io/provisioner-secret-namespace":        "csi-rclone",
-			// "csi.storage.k8s.io/controller-publish-secret-name":      "rclone-secret",
-			// "csi.storage.k8s.io/controller-publish-secret-namespace": "csi-rclone",
-			//"csi.storage.k8s.io/node-publish-secret-name": "",
-			//"csi.storage.k8s.io/node-publish-secret-namespace": "${pvc.namespace}",
-		},
+		// "csi.storage.k8s.io/provisioner-secret-name":             "rclone-secret",
+		// "csi.storage.k8s.io/provisioner-secret-namespace":        "csi-rclone",
+		// "csi.storage.k8s.io/controller-publish-secret-name":      "rclone-secret",
+		// "csi.storage.k8s.io/controller-publish-secret-namespace": "csi-rclone",
+		//"csi.storage.k8s.io/node-publish-secret-name": "",
+		//"csi.storage.k8s.io/node-publish-secret-namespace": "${pvc.namespace}",
 	}
 	sanity.Test(t, cfg)
 }

@@ -5,7 +5,9 @@ import (
 	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/util/mount"
+	"k8s.io/utils/mount"
+
+	utilexec "k8s.io/utils/exec"
 )
 
 type Driver struct {
@@ -48,7 +50,7 @@ func NewNodeServer(d *Driver) *nodeServer {
 		DefaultNodeServer: csicommon.NewDefaultNodeServer(d.csiDriver),
 		mounter: &mount.SafeFormatAndMount{
 			Interface: mount.New(""),
-			Exec:      mount.NewOsExec(),
+			Exec:      utilexec.New(),
 		},
 		RcloneOps: d.rcloneOps,
 	}

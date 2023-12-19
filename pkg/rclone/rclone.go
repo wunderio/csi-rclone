@@ -132,18 +132,18 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 		"hash":     secretHash,
 	}
 
-	secret, err := r.kubeClient.CoreV1().Secrets(r.namespace).Get(deploymentName, metav1.GetOptions{})
+	secret, err := r.kubeClient.CoreV1().Secrets(r.namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return err
 	}
 
 	if !reflect.DeepEqual(secret.Labels, pvDeploymentLabels) {
-		err = r.kubeClient.CoreV1().Secrets(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
+		err = r.kubeClient.CoreV1().Secrets(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return err
 		}
 
-		_, err = r.kubeClient.CoreV1().Secrets(r.namespace).Create(&corev1.Secret{
+		_, err = r.kubeClient.CoreV1().Secrets(r.namespace).Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      deploymentName,
 				Namespace: r.namespace,
@@ -153,26 +153,26 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 				"rclone.conf": rcloneConfigData,
 			},
 			Type: corev1.SecretTypeOpaque,
-		})
+		}, metav1.CreateOptions{})
 
 		if err != nil {
 			return err
 		}
 	}
 
-	deployment, err := r.kubeClient.AppsV1().Deployments(r.namespace).Get(deploymentName, metav1.GetOptions{})
+	deployment, err := r.kubeClient.AppsV1().Deployments(r.namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return err
 	}
 
 	if !reflect.DeepEqual(deployment.Labels, pvDeploymentLabels) {
-		err = r.kubeClient.AppsV1().Deployments(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
+		err = r.kubeClient.AppsV1().Deployments(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return err
 		}
 
-		r.kubeClient.AppsV1().Deployments(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
-		_, err = r.kubeClient.AppsV1().Deployments(r.namespace).Create(&v1.Deployment{
+		r.kubeClient.AppsV1().Deployments(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
+		_, err = r.kubeClient.AppsV1().Deployments(r.namespace).Create(ctx, &v1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      deploymentName,
 				Namespace: r.namespace,
@@ -291,7 +291,7 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 					Type: v1.RecreateDeploymentStrategyType,
 				},
 			},
-		})
+		}, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
@@ -299,15 +299,15 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 	return nil
 }
 
-func ListSecretsByLabel(client *kubernetes.Clientset, namespace string, lab map[string]string) (*corev1.SecretList, error) {
-	return client.CoreV1().Secrets(namespace).List(metav1.ListOptions{
+func ListSecretsByLabel(ctx context.Context, client *kubernetes.Clientset, namespace string, lab map[string]string) (*corev1.SecretList, error) {
+	return client.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.FormatLabels(lab),
 	})
 }
 
-func DeleteSecretsByLabel(client *kubernetes.Clientset, namespace string, lab map[string]string) error {
+func DeleteSecretsByLabel(ctx context.Context, client *kubernetes.Clientset, namespace string, lab map[string]string) error {
 	//propagation := metav1.DeletePropagationBackground
-	return client.CoreV1().Secrets(namespace).DeleteCollection(&metav1.DeleteOptions{
+	return client.CoreV1().Secrets(namespace).DeleteCollection(ctx, metav1.DeleteOptions{
 		//PropagationPolicy: &propagation,
 	},
 		metav1.ListOptions{
@@ -315,14 +315,13 @@ func DeleteSecretsByLabel(client *kubernetes.Clientset, namespace string, lab ma
 		})
 }
 
-func DeleteDeploymentByLabel(client *kubernetes.Clientset, namespace string, lab map[string]string) error {
+func DeleteDeploymentByLabel(ctx context.Context, client *kubernetes.Clientset, namespace string, lab map[string]string) error {
 	propagation := metav1.DeletePropagationForeground
-	return client.AppsV1().Deployments(namespace).DeleteCollection(&metav1.DeleteOptions{
+	return client.AppsV1().Deployments(namespace).DeleteCollection(ctx, metav1.DeleteOptions{
 		PropagationPolicy: &propagation,
-	},
-		metav1.ListOptions{
-			LabelSelector: labels.FormatLabels(lab),
-		})
+	}, metav1.ListOptions{
+		LabelSelector: labels.FormatLabels(lab),
+	})
 }
 
 // func (r *RcloneVolume) normalizedVolumeId() string {
@@ -363,10 +362,10 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string) error {
 	rcloneVolume := &RcloneVolume{ID: volumeId}
 	deploymentName := rcloneVolume.deploymentName()
 	// Wait for Deployment to stop
-	deployment, err := r.kubeClient.AppsV1().Deployments(r.namespace).Get(deploymentName, metav1.GetOptions{})
+	deployment, err := r.kubeClient.AppsV1().Deployments(r.namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			err = r.kubeClient.CoreV1().Secrets(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
+			err = r.kubeClient.CoreV1().Secrets(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
 			if !k8serrors.IsNotFound(err) {
 				return err
 			}
@@ -378,13 +377,13 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string) error {
 		TypeMeta:      metav1.TypeMeta{},
 		LabelSelector: metav1.FormatLabelSelector(deployment.Spec.Selector),
 	}
-	watcher, err := r.kubeClient.CoreV1().Pods(r.namespace).Watch(opts)
+	watcher, err := r.kubeClient.CoreV1().Pods(r.namespace).Watch(ctx, opts)
 	if err != nil {
 		return err
 	}
 	defer watcher.Stop()
 	// Delete Deployment
-	err = r.kubeClient.AppsV1().Deployments(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
+	err = r.kubeClient.AppsV1().Deployments(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
@@ -404,7 +403,7 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string) error {
 		}
 	}
 
-	return r.kubeClient.CoreV1().Secrets(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
+	return r.kubeClient.CoreV1().Secrets(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
 
 	/*	labelQuery := map[string]string{
 			"volumeid": rcloneVolume.ID,
@@ -422,7 +421,7 @@ func (r Rclone) CleanupMountPoint(ctx context.Context, secrets, pameters map[str
 }
 
 func (r Rclone) GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolume, error) {
-	pvs, err := r.kubeClient.CoreV1().PersistentVolumes().List(metav1.ListOptions{})
+	pvs, err := r.kubeClient.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +436,7 @@ func (r Rclone) GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolu
 			secretRef := pv.Spec.CSI.NodePublishSecretRef
 			secrets := make(map[string]string)
 			if secretRef != nil {
-				sec, err := r.kubeClient.CoreV1().Secrets(secretRef.Namespace).Get(secretRef.Name, metav1.GetOptions{})
+				sec, err := r.kubeClient.CoreV1().Secrets(secretRef.Namespace).Get(ctx, secretRef.Name, metav1.GetOptions{})
 				if err == nil && sec != nil && len(sec.Data) > 0 {
 					secrets := make(map[string]string)
 					for k, v := range sec.Data {
@@ -446,7 +445,7 @@ func (r Rclone) GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolu
 				}
 			}
 
-			pvcSecret, err := GetPvcSecret(pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name)
+			pvcSecret, err := GetPvcSecret(ctx, pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name)
 			if err != nil {
 				return nil, err
 			}
@@ -489,15 +488,15 @@ func (r *Rclone) command(cmd, remote, remotePath string, flags map[string]string
 	klog.Infof("executing %s command cmd=rclone, remote=%s:%s", cmd, remote, remotePath)
 	out, err := r.execute.Command("rclone", args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s failed: %v cmd: 'rclone' remote: '%s' remotePath:'%s' args:'%s' config:'%s' output: %q",
+		return fmt.Errorf("%s failed: %v cmd: 'rclone' remote: '%s' remotePath:'%s' args:'%s'  output: %q",
 			cmd, err, remote, remotePath, args, string(out))
 	}
 
 	return nil
 }
 
-func WaitForPodBySelectorRunning(c kubernetes.Interface, namespace, selector string, timeout int) error {
-	podList, err := ListPods(c, namespace, selector)
+func WaitForPodBySelectorRunning(ctx context.Context, c kubernetes.Interface, namespace, selector string, timeout int) error {
+	podList, err := ListPods(ctx, c, namespace, selector)
 	if err != nil {
 		return err
 	}
@@ -506,15 +505,15 @@ func WaitForPodBySelectorRunning(c kubernetes.Interface, namespace, selector str
 	}
 
 	for _, pod := range podList.Items {
-		if err := waitForPodRunning(c, namespace, pod.Name, time.Duration(timeout)*time.Second); err != nil {
+		if err := waitForPodRunning(ctx, c, namespace, pod.Name, time.Duration(timeout)*time.Second); err != nil {
 			return err
 		}
 	}
 	return nil
 }
-func ListPods(c kubernetes.Interface, namespace, selector string) (*corev1.PodList, error) {
-	listOptions := metav1.ListOptions{IncludeUninitialized: true, LabelSelector: selector}
-	podList, err := c.CoreV1().Pods(namespace).List(listOptions)
+func ListPods(ctx context.Context, c kubernetes.Interface, namespace, selector string) (*corev1.PodList, error) {
+	listOptions := metav1.ListOptions{LabelSelector: selector}
+	podList, err := c.CoreV1().Pods(namespace).List(ctx, listOptions)
 
 	if err != nil {
 		return nil, err
@@ -522,15 +521,15 @@ func ListPods(c kubernetes.Interface, namespace, selector string) (*corev1.PodLi
 	return podList, nil
 }
 
-func waitForPodRunning(c kubernetes.Interface, namespace, podName string, timeout time.Duration) error {
-	return wait.PollImmediate(time.Second, timeout, isPodRunning(c, podName, namespace))
+func waitForPodRunning(ctx context.Context, c kubernetes.Interface, namespace, podName string, timeout time.Duration) error {
+	return wait.PollImmediate(time.Second, timeout, isPodRunning(ctx, c, podName, namespace))
 }
 
-func isPodRunning(c kubernetes.Interface, podName, namespace string) wait.ConditionFunc {
+func isPodRunning(ctx context.Context, c kubernetes.Interface, podName, namespace string) wait.ConditionFunc {
 	return func() (bool, error) {
 		fmt.Printf(".") // progress bar!
 
-		pod, err := c.CoreV1().Pods(namespace).Get(podName, metav1.GetOptions{IncludeUninitialized: true})
+		pod, err := c.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}

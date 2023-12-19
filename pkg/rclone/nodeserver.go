@@ -21,8 +21,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/kubernetes/pkg/util/mount"
-	"k8s.io/kubernetes/pkg/volume/util"
+	"k8s.io/utils/mount"
 
 	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 )
@@ -57,7 +56,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	pvcName := volumeContext["pvcName"]
 	pvcNamespace := volumeContext["pvcNamespace"]
 
-	pvcSecret, err := GetPvcSecret(pvcNamespace, pvcName)
+	pvcSecret, err := GetPvcSecret(ctx, pvcNamespace, pvcName)
 	if err != nil {
 		return nil, err
 	}
@@ -111,12 +110,12 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func GetPvcSecret(pvcNamespace string, pvcName string) (*v1.Secret, error) {
+func GetPvcSecret(ctx context.Context, pvcNamespace string, pvcName string) (*v1.Secret, error) {
 	cs, err := kube.GetK8sClient()
 	if pvcName == "" || pvcNamespace == "" {
 		return nil, nil
 	}
-	pvc, err := cs.CoreV1().PersistentVolumeClaims(pvcNamespace).Get(pvcName, metav1.GetOptions{})
+	pvc, err := cs.CoreV1().PersistentVolumeClaims(pvcNamespace).Get(ctx, pvcName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +124,7 @@ func GetPvcSecret(pvcNamespace string, pvcName string) (*v1.Secret, error) {
 		annotations := pvc.GetAnnotations()
 		if len(annotations) > 0 {
 			if v, found := annotations[CSI_ANNOTATION_PREFIX+"secret-name"]; found {
-				pvcSecret, err = cs.CoreV1().Secrets(pvcNamespace).Get(v, metav1.GetOptions{})
+				pvcSecret, err = cs.CoreV1().Secrets(pvcNamespace).Get(ctx, v, metav1.GetOptions{})
 				if err != nil {
 					return nil, err
 				}
@@ -252,14 +251,14 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 
 	if _, err := ns.RcloneOps.GetVolumeById(ctx, req.GetVolumeId()); err == ErrVolumeNotFound {
-		util.UnmountPath(req.GetTargetPath(), ns.mounter)
+		mount.CleanupMountPoint(req.GetTargetPath(), ns.mounter, false)
 		return &csi.NodeUnpublishVolumeResponse{}, nil
 	}
 
 	if err := ns.RcloneOps.Unmount(ctx, req.GetVolumeId()); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	util.UnmountPath(req.GetTargetPath(), ns.mounter)
+	mount.CleanupMountPoint(req.GetTargetPath(), ns.mounter, false)
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
