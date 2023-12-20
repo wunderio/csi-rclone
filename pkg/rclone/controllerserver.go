@@ -68,6 +68,9 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume without capabilities")
 	}
 
+	// we don't use the size as it makes no sense for rclone. but csi drivers should succeed if
+	// called twice with the same capacity for the same volume and fail if called twice with
+	// differing capacity, so we need to remember it
 	volSizeBytes := int64(req.GetCapacityRange().GetRequiredBytes())
 	cs.mutex.Lock()
 	if val, ok := cs.active_volumes[volumeName]; ok && val != volSizeBytes {
@@ -81,7 +84,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	ns := req.Parameters["csi.storage.k8s.io/pvc/namespace"]
 	// NOTE: We need the PVC name and namespace when mounting the volume, not here
 	// that is why they are passed to the VolumeContext
-	remote, remotePath, configData, _, err := extractFlags(req.GetParameters(), req.GetSecrets(), nil)
+	remote, remotePath, _, _, err := extractFlags(req.GetParameters(), req.GetSecrets(), nil)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "CreateVolume: %v", err)
 	}
@@ -89,11 +92,10 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		Volume: &csi.Volume{
 			VolumeId: volumeName,
 			VolumeContext: map[string]string{
-				"pvcName":    pvcName,
+				"secretName": pvcName,
 				"namespace":  ns,
 				"remote":     remote,
 				"remotePath": remotePath,
-				"configData": configData,
 			},
 		},
 	}, nil

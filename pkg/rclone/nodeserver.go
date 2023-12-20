@@ -51,14 +51,15 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	targetPath := req.GetTargetPath()
 	volumeId := req.GetVolumeId()
 	volumeContext := req.GetVolumeContext()
-	pvcName := volumeContext["pvcName"]
+	secretName := volumeContext["secretName"]
 	namespace := volumeContext["namespace"]
 	klog.Infof("context: %s,%s, %s", volumeContext, req.GetPublishContext(), namespace)
 
-	pvcSecret, err := GetPvcSecret(ctx, namespace, pvcName)
+	pvcSecret, err := GetPvcSecret(ctx, namespace, secretName)
 	if err != nil {
 		return nil, err
 	}
+	klog.Infof("secret: %s", pvcSecret)
 	remote, remotePath, configData, flags, e := extractFlags(req.GetVolumeContext(), req.GetSecrets(), pvcSecret)
 	if e != nil {
 		klog.Warningf("storage parameter error: %s", e)
@@ -96,6 +97,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		Remote:     remote,
 		RemotePath: remotePath,
 	}
+	klog.Infof("config: %s", configData)
 	err = ns.RcloneOps.Mount(ctx, rcloneVol, targetPath, namespace, configData, flags)
 	if err != nil {
 		klog.Errorf("Mounting failed: %s, %s", err, namespace)
@@ -110,22 +112,9 @@ func GetPvcSecret(ctx context.Context, pvcNamespace string, pvcName string) (*v1
 	if pvcName == "" || pvcNamespace == "" {
 		return nil, nil
 	}
-	pvc, err := cs.CoreV1().PersistentVolumeClaims(pvcNamespace).Get(ctx, pvcName, metav1.GetOptions{})
+	pvcSecret, err := cs.CoreV1().Secrets(pvcNamespace).Get(ctx, pvcName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
-	}
-	var pvcSecret *v1.Secret
-	if pvc != nil {
-		annotations := pvc.GetAnnotations()
-		if len(annotations) > 0 {
-			if v, found := annotations[CSI_ANNOTATION_PREFIX+"secret-name"]; found {
-				pvcSecret, err = cs.CoreV1().Secrets(pvcNamespace).Get(ctx, v, metav1.GetOptions{})
-				if err != nil {
-					return nil, err
-				}
-			}
-
-		}
 	}
 	return pvcSecret, nil
 }
@@ -169,10 +158,13 @@ func extractFlags(volumeContext map[string]string, secret map[string]string, pvc
 		}
 	}
 	if pvcSecret != nil {
-		if len(pvcSecret.StringData) > 0 {
-			for k, v := range pvcSecret.StringData {
-				flags[k] = v
+		klog.Infof("secret2: %s", pvcSecret)
+		if len(pvcSecret.Data) > 0 {
+			klog.Infof("secret3: %s", pvcSecret.Data)
+			for k, v := range pvcSecret.Data {
+				flags[k] = string(v)
 			}
+			klog.Infof("flags: %s", flags)
 		}
 	}
 

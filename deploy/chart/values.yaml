@@ -17,6 +17,7 @@ csiControllerRclone:
     args:
     - --csi-address=$(ADDRESS)
     - --capacity-ownerref-level=0
+    - "--extra-create-metadata" # do not remove this, it is required for correct functioning
     env:
       address: /csi/csi.sock
     image:

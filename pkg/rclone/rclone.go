@@ -131,7 +131,6 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 		"hash":     secretHash,
 	}
 
-	klog.Infof("ns: %s", namespace)
 	secret, err := r.kubeClient.CoreV1().Secrets(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return err

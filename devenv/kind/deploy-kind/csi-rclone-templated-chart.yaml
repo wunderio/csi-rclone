@@ -83,7 +83,8 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 provisioner: csi-rclone
 # TODO: check what it does
-#volumeBindingMode: WaitForFirstConsumer
+volumeBindingMode: Immediate
+reclaimPolicy: Delete
 parameters:
   csi.storage.k8s.io/provisioner-secret-name: rclone-provisioner-secret
   csi.storage.k8s.io/provisioner-secret-namespace: csi-rclone
@@ -647,6 +648,7 @@ spec:
       - args:
         - --csi-address=$(ADDRESS)
         - --capacity-ownerref-level=0
+        - --extra-create-metadata
         env:
         - name: ADDRESS
           value: "/csi/csi.sock"
