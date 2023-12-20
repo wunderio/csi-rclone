@@ -4,30 +4,39 @@ package rclone
 
 import (
 	"os"
+	"sync"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	// "github.com/google/uuid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	// "k8s.io/klog"
+	"k8s.io/klog"
 
 	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 )
 
 type controllerServer struct {
 	*csicommon.DefaultControllerServer
-	RcloneOps Operations
+	RcloneOps      Operations
+	active_volumes map[string]int64
+	mutex          sync.RWMutex
 }
 
 func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
-	if len(req.GetVolumeId()) == 0 {
+	volId := req.GetVolumeId()
+	if len(volId) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "DeteleVolume must be provided volume id")
 	}
 	if len(req.GetVolumeCapabilities()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume without capabilities")
 	}
+
+	cs.mutex.Lock()
+	if _, ok := cs.active_volumes[volId]; !ok {
+		cs.mutex.Unlock()
+		return nil, status.Errorf(codes.NotFound, "Volume %s not found", volId)
+	}
+	cs.mutex.Unlock()
 	return &csi.ValidateVolumeCapabilitiesResponse{
 		Confirmed: &csi.ValidateVolumeCapabilitiesResponse_Confirmed{
 			VolumeContext:      req.VolumeContext,
@@ -49,6 +58,7 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 
 // Provisioning Volumes
 func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
+	klog.Infof("ControllerCreateVolume: called with args %+v", *req)
 	volumeName := req.GetName()
 	if len(volumeName) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume name must be provided")
@@ -58,16 +68,32 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume without capabilities")
 	}
 
+	volSizeBytes := int64(req.GetCapacityRange().GetRequiredBytes())
+	cs.mutex.Lock()
+	if val, ok := cs.active_volumes[volumeName]; ok && val != volSizeBytes {
+		cs.mutex.Unlock()
+		return nil, status.Errorf(codes.AlreadyExists, "Volume operation already exists for volume %s", volumeName)
+	}
+	cs.active_volumes[volumeName] = volSizeBytes
+	cs.mutex.Unlock()
+
 	pvcName := req.Parameters["csi.storage.k8s.io/pvc/name"]
 	ns := req.Parameters["csi.storage.k8s.io/pvc/namespace"]
 	// NOTE: We need the PVC name and namespace when mounting the volume, not here
 	// that is why they are passed to the VolumeContext
+	remote, remotePath, configData, _, err := extractFlags(req.GetParameters(), req.GetSecrets(), nil)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "CreateVolume: %v", err)
+	}
 	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
 			VolumeId: volumeName,
 			VolumeContext: map[string]string{
-				"pvcName":      pvcName,
-				"pvcNamespace": ns,
+				"pvcName":    pvcName,
+				"namespace":  ns,
+				"remote":     remote,
+				"remotePath": remotePath,
+				"configData": configData,
 			},
 		},
 	}, nil
@@ -76,9 +102,13 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 // Delete Volume
 func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
-	if len(req.GetVolumeId()) == 0 {
+	volId := req.GetVolumeId()
+	if len(volId) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "DeteleVolume must be provided volume id")
 	}
+	cs.mutex.Lock()
+	delete(cs.active_volumes, volId)
+	cs.mutex.Unlock()
 
 	return &csi.DeleteVolumeResponse{}, nil
 }

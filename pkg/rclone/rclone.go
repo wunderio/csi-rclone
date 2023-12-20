@@ -34,8 +34,8 @@ var (
 type Operations interface {
 	CreateVol(ctx context.Context, volumeName, remote, remotePath, rcloneConfigPath string, pameters map[string]string) error
 	DeleteVol(ctx context.Context, rcloneVolume *RcloneVolume, rcloneConfigPath string, pameters map[string]string) error
-	Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath string, rcloneConfigData string, pameters map[string]string) error
-	Unmount(ctx context.Context, volumeId string) error
+	Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath string, namespace string, rcloneConfigData string, pameters map[string]string) error
+	Unmount(ctx context.Context, volumeId string, namespace string) error
 	CleanupMountPoint(ctx context.Context, secrets, pameters map[string]string) error
 	GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolume, error)
 }
@@ -43,7 +43,6 @@ type Operations interface {
 type Rclone struct {
 	execute    exec.Interface
 	kubeClient *kubernetes.Clientset
-	namespace  string
 }
 
 type RcloneVolume struct {
@@ -52,7 +51,7 @@ type RcloneVolume struct {
 	ID         string
 }
 
-func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath, rcloneConfigData string, parameters map[string]string) error {
+func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath, namespace string, rcloneConfigData string, parameters map[string]string) error {
 	//mountingTargetPath := filepath.Dir(targetPath)
 	//mountingFolderName := filepath.Base(targetPath)
 	mountArgs := []string{}
@@ -132,21 +131,22 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 		"hash":     secretHash,
 	}
 
-	secret, err := r.kubeClient.CoreV1().Secrets(r.namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+	klog.Infof("ns: %s", namespace)
+	secret, err := r.kubeClient.CoreV1().Secrets(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return err
 	}
 
 	if !reflect.DeepEqual(secret.Labels, pvDeploymentLabels) {
-		err = r.kubeClient.CoreV1().Secrets(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
+		err = r.kubeClient.CoreV1().Secrets(namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return err
 		}
 
-		_, err = r.kubeClient.CoreV1().Secrets(r.namespace).Create(ctx, &corev1.Secret{
+		_, err = r.kubeClient.CoreV1().Secrets(namespace).Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      deploymentName,
-				Namespace: r.namespace,
+				Namespace: namespace,
 				Labels:    pvDeploymentLabels,
 			},
 			StringData: map[string]string{
@@ -160,22 +160,22 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 		}
 	}
 
-	deployment, err := r.kubeClient.AppsV1().Deployments(r.namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+	deployment, err := r.kubeClient.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return err
 	}
 
 	if !reflect.DeepEqual(deployment.Labels, pvDeploymentLabels) {
-		err = r.kubeClient.AppsV1().Deployments(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
+		err = r.kubeClient.AppsV1().Deployments(namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return err
 		}
 
-		r.kubeClient.AppsV1().Deployments(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
-		_, err = r.kubeClient.AppsV1().Deployments(r.namespace).Create(ctx, &v1.Deployment{
+		r.kubeClient.AppsV1().Deployments(namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
+		_, err = r.kubeClient.AppsV1().Deployments(namespace).Create(ctx, &v1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      deploymentName,
-				Namespace: r.namespace,
+				Namespace: namespace,
 				Labels:    pvDeploymentLabels,
 			},
 			Spec: v1.DeploymentSpec{
@@ -358,14 +358,14 @@ func (r Rclone) DeleteVol(ctx context.Context, rcloneVolume *RcloneVolume, rclon
 	return r.command("purge", rcloneVolume.Remote, rcloneVolume.RemotePath, flags)
 }
 
-func (r Rclone) Unmount(ctx context.Context, volumeId string) error {
+func (r Rclone) Unmount(ctx context.Context, volumeId string, namespace string) error {
 	rcloneVolume := &RcloneVolume{ID: volumeId}
 	deploymentName := rcloneVolume.deploymentName()
 	// Wait for Deployment to stop
-	deployment, err := r.kubeClient.AppsV1().Deployments(r.namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+	deployment, err := r.kubeClient.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			err = r.kubeClient.CoreV1().Secrets(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
+			err = r.kubeClient.CoreV1().Secrets(namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
 			if !k8serrors.IsNotFound(err) {
 				return err
 			}
@@ -377,13 +377,13 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string) error {
 		TypeMeta:      metav1.TypeMeta{},
 		LabelSelector: metav1.FormatLabelSelector(deployment.Spec.Selector),
 	}
-	watcher, err := r.kubeClient.CoreV1().Pods(r.namespace).Watch(ctx, opts)
+	watcher, err := r.kubeClient.CoreV1().Pods(namespace).Watch(ctx, opts)
 	if err != nil {
 		return err
 	}
 	defer watcher.Stop()
 	// Delete Deployment
-	err = r.kubeClient.AppsV1().Deployments(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
+	err = r.kubeClient.AppsV1().Deployments(namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
@@ -403,16 +403,16 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string) error {
 		}
 	}
 
-	return r.kubeClient.CoreV1().Secrets(r.namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
+	return r.kubeClient.CoreV1().Secrets(namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
 
 	/*	labelQuery := map[string]string{
 			"volumeid": rcloneVolume.ID,
 		}
-		err := DeleteDeploymentByLabel(r.kubeClient, r.namespace, labelQuery)
+		err := DeleteDeploymentByLabel(r.kubeClient, namespace, labelQuery)
 		if err != nil {
 			return err
 		}
-		return DeleteSecretsByLabel(r.kubeClient, r.namespace, labelQuery)*/
+		return DeleteSecretsByLabel(r.kubeClient, namespace, labelQuery)*/
 }
 
 func (r Rclone) CleanupMountPoint(ctx context.Context, secrets, pameters map[string]string) error {
@@ -468,7 +468,6 @@ func NewRclone(kubeClient *kubernetes.Clientset) Operations {
 	return &Rclone{
 		execute:    exec.New(),
 		kubeClient: kubeClient,
-		namespace:  os.Getenv("POD_NAMESPACE"),
 	}
 }
 

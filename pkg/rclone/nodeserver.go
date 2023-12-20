@@ -6,11 +6,9 @@ package rclone
 // Follow lifecycle
 
 import (
-	"errors"
 	"io/ioutil"
 	"os"
 	"strings"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,9 +52,10 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	volumeId := req.GetVolumeId()
 	volumeContext := req.GetVolumeContext()
 	pvcName := volumeContext["pvcName"]
-	pvcNamespace := volumeContext["pvcNamespace"]
+	namespace := volumeContext["namespace"]
+	klog.Infof("context: %s,%s, %s", volumeContext, req.GetPublishContext(), namespace)
 
-	pvcSecret, err := GetPvcSecret(ctx, pvcNamespace, pvcName)
+	pvcSecret, err := GetPvcSecret(ctx, namespace, pvcName)
 	if err != nil {
 		return nil, err
 	}
@@ -97,13 +96,9 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		Remote:     remote,
 		RemotePath: remotePath,
 	}
-	err = ns.RcloneOps.Mount(ctx, rcloneVol, targetPath, configData, flags)
+	err = ns.RcloneOps.Mount(ctx, rcloneVol, targetPath, namespace, configData, flags)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	err = ns.WaitForMountAvailable(targetPath)
-	if err != nil {
+		klog.Errorf("Mounting failed: %s, %s", err, namespace)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -225,20 +220,6 @@ func extractConfigData(parameters map[string]string) (string, map[string]string)
 	return configData, flags
 }
 
-func (ns *nodeServer) WaitForMountAvailable(mountpoint string) error {
-	for {
-		select {
-		case <-time.After(100 * time.Millisecond):
-			notMnt, _ := ns.mounter.IsLikelyNotMountPoint(mountpoint)
-			if !notMnt {
-				return nil
-			}
-		case <-time.After(1 * time.Minute):
-			return errors.New("wait for mount available timeout")
-		}
-	}
-}
-
 // Unmounting Volumes
 func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 	klog.Infof("NodeUnPublishVolume: called with args %+v", *req)
@@ -255,7 +236,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		return &csi.NodeUnpublishVolumeResponse{}, nil
 	}
 
-	if err := ns.RcloneOps.Unmount(ctx, req.GetVolumeId()); err != nil {
+	if err := ns.RcloneOps.Unmount(ctx, req.GetVolumeId(), "namespace"); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	mount.CleanupMountPoint(req.GetTargetPath(), ns.mounter, false)

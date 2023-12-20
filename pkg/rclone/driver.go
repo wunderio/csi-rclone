@@ -1,6 +1,8 @@
 package rclone
 
 import (
+	"sync"
+
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 	"k8s.io/client-go/kubernetes"
@@ -61,6 +63,8 @@ func NewControllerServer(d *Driver) *controllerServer {
 		// Creating and passing the NewDefaultControllerServer is useless and unecessary
 		DefaultControllerServer: csicommon.NewDefaultControllerServer(d.csiDriver),
 		RcloneOps:               d.rcloneOps,
+		active_volumes:          map[string]int64{},
+		mutex:                   sync.RWMutex{},
 	}
 }
 
