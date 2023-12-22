@@ -19,7 +19,7 @@ type Driver struct {
 	ns        *nodeServer
 	cap       []*csi.VolumeCapability_AccessMode
 	cscap     []*csi.ControllerServiceCapability
-	rcloneOps Operations
+	RcloneOps Operations
 }
 
 var (
@@ -32,7 +32,7 @@ func NewDriver(nodeID, endpoint string, kubeClient *kubernetes.Clientset) *Drive
 
 	d := &Driver{}
 	d.endpoint = endpoint
-	d.rcloneOps = NewRclone(kubeClient)
+	d.RcloneOps = NewRclone(kubeClient)
 
 	d.csiDriver = csicommon.NewCSIDriver(DriverName, DriverVersion, nodeID)
 	d.csiDriver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{
@@ -54,7 +54,7 @@ func NewNodeServer(d *Driver) *nodeServer {
 			Interface: mount.New(""),
 			Exec:      utilexec.New(),
 		},
-		RcloneOps: d.rcloneOps,
+		RcloneOps: d.RcloneOps,
 	}
 }
 
@@ -62,7 +62,7 @@ func NewControllerServer(d *Driver) *controllerServer {
 	return &controllerServer{
 		// Creating and passing the NewDefaultControllerServer is useless and unecessary
 		DefaultControllerServer: csicommon.NewDefaultControllerServer(d.csiDriver),
-		RcloneOps:               d.rcloneOps,
+		RcloneOps:               d.RcloneOps,
 		active_volumes:          map[string]int64{},
 		mutex:                   sync.RWMutex{},
 	}
@@ -70,6 +70,7 @@ func NewControllerServer(d *Driver) *controllerServer {
 
 func (d *Driver) Run() {
 	s := csicommon.NewNonBlockingGRPCServer()
+	defer d.RcloneOps.Cleanup()
 	s.Start(d.endpoint,
 		csicommon.NewDefaultIdentityServer(d.csiDriver),
 		NewControllerServer(d),

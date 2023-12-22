@@ -109,10 +109,10 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	err = ns.WaitForMountAvailable(targetPath)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
+	// err = ns.WaitForMountAvailable(targetPath)
+	// if err != nil {
+	// 	return nil, status.Error(codes.Internal, err.Error())
+	// }
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
@@ -266,7 +266,7 @@ func (ns *nodeServer) WaitForMountAvailable(mountpoint string) error {
 			if !notMnt {
 				return nil
 			}
-		case <-time.After(30 * time.Second):
+		case <-time.After(3 * time.Second):
 			return errors.New("wait for mount available timeout")
 		}
 	}
