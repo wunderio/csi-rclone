@@ -6,9 +6,10 @@ package rclone
 // Follow lifecycle
 
 import (
-	"io/ioutil"
+	"errors"
 	"os"
 	"strings"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -59,8 +60,9 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	if err != nil {
 		return nil, err
 	}
-	klog.Infof("secret: %s", pvcSecret)
 	remote, remotePath, configData, flags, e := extractFlags(req.GetVolumeContext(), req.GetSecrets(), pvcSecret)
+	delete(flags, "secretName")
+	delete(flags, "namespace")
 	if e != nil {
 		klog.Warningf("storage parameter error: %s", e)
 		return nil, e
@@ -79,7 +81,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 	if !notMnt {
 		// testing original mount point, make sure the mount link is valid
-		if _, err := ioutil.ReadDir(targetPath); err == nil {
+		if _, err := os.ReadDir(targetPath); err == nil {
 			klog.Infof("already mounted to target %s", targetPath)
 			return &csi.NodePublishVolumeResponse{}, nil
 		}
@@ -97,13 +99,20 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		Remote:     remote,
 		RemotePath: remotePath,
 	}
-	klog.Infof("config: %s", configData)
 	err = ns.RcloneOps.Mount(ctx, rcloneVol, targetPath, namespace, configData, flags)
 	if err != nil {
-		klog.Errorf("Mounting failed: %s, %s", err, namespace)
+		if os.IsPermission(err) {
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		}
+		if strings.Contains(err.Error(), "invalid argument") {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-
+	err = ns.WaitForMountAvailable(targetPath)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
@@ -158,13 +167,10 @@ func extractFlags(volumeContext map[string]string, secret map[string]string, pvc
 		}
 	}
 	if pvcSecret != nil {
-		klog.Infof("secret2: %s", pvcSecret)
 		if len(pvcSecret.Data) > 0 {
-			klog.Infof("secret3: %s", pvcSecret.Data)
 			for k, v := range pvcSecret.Data {
 				flags[k] = string(v)
 			}
-			klog.Infof("flags: %s", flags)
 		}
 	}
 
@@ -250,4 +256,18 @@ func validateUnPublishVolumeRequest(req *csi.NodeUnpublishVolumeRequest) error {
 // Resizing Volume
 func (*nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method NodeExpandVolume not implemented")
+}
+
+func (ns *nodeServer) WaitForMountAvailable(mountpoint string) error {
+	for {
+		select {
+		case <-time.After(100 * time.Millisecond):
+			notMnt, _ := ns.mounter.IsLikelyNotMountPoint(mountpoint)
+			if !notMnt {
+				return nil
+			}
+		case <-time.After(30 * time.Second):
+			return errors.New("wait for mount available timeout")
+		}
+	}
 }

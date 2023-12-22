@@ -84,7 +84,11 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	ns := req.Parameters["csi.storage.k8s.io/pvc/namespace"]
 	// NOTE: We need the PVC name and namespace when mounting the volume, not here
 	// that is why they are passed to the VolumeContext
-	remote, remotePath, _, _, err := extractFlags(req.GetParameters(), req.GetSecrets(), nil)
+	pvcSecret, err := GetPvcSecret(ctx, ns, pvcName)
+	if err != nil {
+		return nil, err
+	}
+	remote, remotePath, _, _, err := extractFlags(req.GetParameters(), req.GetSecrets(), pvcSecret)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "CreateVolume: %v", err)
 	}

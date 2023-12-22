@@ -1,30 +1,25 @@
 package rclone
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 	"os"
-	"reflect"
+	os_exec "os/exec"
+
 	"strings"
 	"time"
 
 	"golang.org/x/net/context"
-	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/client/conditions"
 	"k8s.io/utils/exec"
-	"k8s.io/utils/pointer"
 )
 
 var (
@@ -52,20 +47,14 @@ type RcloneVolume struct {
 }
 
 func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath, namespace string, rcloneConfigData string, parameters map[string]string) error {
-	//mountingTargetPath := filepath.Dir(targetPath)
-	//mountingFolderName := filepath.Base(targetPath)
+	mountCmd := "rclone"
 	mountArgs := []string{}
-	//containerMountPath := fmt.Sprintf("/mount/%s", mountingFolderName)
 	mountArgs = append(mountArgs, "mount")
-	mountArgs = append(mountArgs, fmt.Sprintf("%s:/%s", rcloneVolume.Remote, rcloneVolume.RemotePath))
+	remoteWithPath := fmt.Sprintf("%s:%s", rcloneVolume.Remote, rcloneVolume.RemotePath)
+	mountArgs = append(mountArgs, remoteWithPath)
 	mountArgs = append(mountArgs, targetPath)
+	mountArgs = append(mountArgs, "--daemon")
 	defaultFlags := map[string]string{}
-	defaultFlags["rc"] = ""
-	defaultFlags["rc-addr"] = "0.0.0.0:5572"
-	defaultFlags["rc-enable-metrics"] = ""
-	defaultFlags["rc-no-auth"] = ""
-	defaultFlags["volname"] = rcloneVolume.ID
-	defaultFlags["devname"] = rcloneVolume.ID
 	defaultFlags["cache-info-age"] = "72h"
 	defaultFlags["cache-chunk-clean-interval"] = "15m"
 	defaultFlags["dir-cache-time"] = "60s"
@@ -94,206 +83,39 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 		}
 	}
 
+	if rcloneConfigData != "" {
+
+		configFile, err := os.CreateTemp("", "rclone.conf")
+		if err != nil {
+			return err
+		}
+
+		// Normally, a defer os.Remove(configFile.Name()) should be placed here.
+		// However, due to a rclone mount --daemon flag, rclone forks and creates a race condition
+		// with this nodeplugin proceess. As a result, the config file gets deleted
+		// before it's reread by a forked process.
+
+		if _, err := configFile.Write([]byte(rcloneConfigData)); err != nil {
+			return err
+		}
+		if err := configFile.Close(); err != nil {
+			return err
+		}
+
+		mountArgs = append(mountArgs, "--config", configFile.Name())
+	}
 	// create target, os.Mkdirall is noop if it exists
 	err := os.MkdirAll(targetPath, 0750)
 	if err != nil {
 		return err
 	}
+	klog.Infof("executing mount command cmd=%s, args=%s, targetpath=%s", mountCmd, mountArgs, targetPath)
 
-	// Wait time for VFS write back
-	timeWaitVFS := time.Duration(0)
-	waitCommand := ""
-	if cacheMode, ok := parameters["vfs-cache-mode"]; ok {
-		if cacheMode != "off" {
-			if vfsWriteBack, ok := parameters["vfs-write-back"]; ok {
-				timeWaitVFS, err = time.ParseDuration(vfsWriteBack)
-				if err != nil {
-					return err
-				}
-			} else {
-				timeWaitVFS = 5 * time.Second
-			}
-			waitCommand = "echo \"Waiting for transfers to complete\" > /proc/1/fd/1; " +
-				`while [ $( rclone rc vfs/stats | tr -d '\n' | sed -E 's/^\{(.*,)?\s*"diskCache"\s*:\s*\{(.*,)?\s*"(uploadsQueued|uploadsInProgress)"\s*:\s*([0-9]+)\s*(,.*)?,\s*"(uploadsQueued|uploadsInProgress)"\s*:\s*([0-9]+)\s*(,.*)?\}.*\}/\4 + \7/' | bc ) -gt 0 ] ; do sleep 1; done; ` +
-				"echo \"Done waiting\" > /proc/1/fd/1; "
-		}
-	}
-
-	//deploymentName := fmt.Sprintf("%s%d", rcloneVolume.deploymentName(), uuid.New().ID())
-	deploymentName := rcloneVolume.deploymentName()
-	h := sha256.New()
-	h.Write([]byte(rcloneConfigData))
-	secretHash := hex.EncodeToString(h.Sum(nil))[:63]
-	mountPropagation := corev1.MountPropagationBidirectional
-	hostPathCreate := corev1.HostPathDirectoryOrCreate
-	pvDeploymentLabels := map[string]string{
-		"volumeid": rcloneVolume.ID,
-		"hash":     secretHash,
-	}
-
-	secret, err := r.kubeClient.CoreV1().Secrets(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return err
-	}
-
-	if !reflect.DeepEqual(secret.Labels, pvDeploymentLabels) {
-		err = r.kubeClient.CoreV1().Secrets(namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return err
-		}
-
-		_, err = r.kubeClient.CoreV1().Secrets(namespace).Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      deploymentName,
-				Namespace: namespace,
-				Labels:    pvDeploymentLabels,
-			},
-			StringData: map[string]string{
-				"rclone.conf": rcloneConfigData,
-			},
-			Type: corev1.SecretTypeOpaque,
-		}, metav1.CreateOptions{})
-
-		if err != nil {
-			return err
-		}
-	}
-
-	deployment, err := r.kubeClient.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return err
-	}
-
-	if !reflect.DeepEqual(deployment.Labels, pvDeploymentLabels) {
-		err = r.kubeClient.AppsV1().Deployments(namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return err
-		}
-
-		r.kubeClient.AppsV1().Deployments(namespace).Delete(ctx, deploymentName, metav1.DeleteOptions{})
-		_, err = r.kubeClient.AppsV1().Deployments(namespace).Create(ctx, &v1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      deploymentName,
-				Namespace: namespace,
-				Labels:    pvDeploymentLabels,
-			},
-			Spec: v1.DeploymentSpec{
-				Replicas: pointer.Int32Ptr(1),
-				Selector: &metav1.LabelSelector{
-					MatchLabels: pvDeploymentLabels,
-				},
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: pvDeploymentLabels,
-					},
-					Spec: corev1.PodSpec{
-						NodeName:          os.Getenv("NODE_ID"),
-						RestartPolicy:     corev1.RestartPolicyAlways,
-						PriorityClassName: "system-cluster-critical",
-						// More time for transfers to complete
-						TerminationGracePeriodSeconds: pointer.Int64Ptr(900 + int64(math.Ceil(timeWaitVFS.Seconds()))),
-						Volumes: []corev1.Volume{
-							{
-								Name: "mount",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: targetPath,
-										Type: &hostPathCreate,
-									},
-								},
-							},
-							{
-								Name: "config",
-								VolumeSource: corev1.VolumeSource{
-									Secret: &corev1.SecretVolumeSource{
-										SecretName: deploymentName,
-										Items: []corev1.KeyToPath{
-											{
-												Key:  "rclone.conf",
-												Path: "rclone.conf",
-												Mode: pointer.Int32Ptr(0777),
-											},
-										},
-										Optional: pointer.BoolPtr(false),
-									},
-								},
-							},
-						},
-						Containers: []corev1.Container{
-							{
-								Name:    "rclone-mounter",
-								Image:   "rclone/rclone:1.62.2",
-								Command: []string{"rclone"},
-								Args:    mountArgs,
-								Ports: []corev1.ContainerPort{
-									{
-										Name:          "api",
-										ContainerPort: 5572,
-										Protocol:      "TCP",
-									},
-								},
-								Lifecycle: &corev1.Lifecycle{
-									PreStop: &corev1.Handler{
-										// Do not umount until all transfers finished.
-										Exec: &corev1.ExecAction{
-											Command: []string{"/bin/sh", "-c", waitCommand + " umount " + targetPath},
-										},
-									},
-								},
-								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      "config",
-										MountPath: "/root/.config/rclone/",
-									},
-									{
-										Name:             "mount",
-										MountPath:        targetPath,
-										MountPropagation: &mountPropagation,
-									},
-								},
-								SecurityContext: &corev1.SecurityContext{
-									Capabilities: &corev1.Capabilities{
-										Add: []corev1.Capability{"SYS_ADMIN"},
-									},
-									Privileged: pointer.BoolPtr(true),
-								},
-								LivenessProbe: &corev1.Probe{
-									InitialDelaySeconds: 1,
-									TimeoutSeconds:      5,
-									PeriodSeconds:       10,
-									SuccessThreshold:    1,
-									FailureThreshold:    10,
-									Handler: corev1.Handler{
-										Exec: &corev1.ExecAction{
-											Command: []string{"sh", "-c", fmt.Sprintf("ls -lah %s", targetPath)},
-										},
-									},
-								},
-								ReadinessProbe: &corev1.Probe{
-									InitialDelaySeconds: 1,
-									TimeoutSeconds:      5,
-									PeriodSeconds:       10,
-									SuccessThreshold:    1,
-									FailureThreshold:    10,
-									Handler: corev1.Handler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/metrics",
-											Port: intstr.FromInt(5572),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				Strategy: v1.DeploymentStrategy{
-					Type: v1.RecreateDeploymentStrategyType,
-				},
-			},
-		}, metav1.CreateOptions{})
-		if err != nil {
-			return err
-		}
+	cmd := os_exec.Command(mountCmd, mountArgs...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("mounting failed: %v cmd: '%s' remote: '%s' targetpath: %s output: %q",
+			err, mountCmd, remoteWithPath, targetPath, string(out))
 	}
 	return nil
 }

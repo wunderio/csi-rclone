@@ -52,7 +52,10 @@ func TestMyDriver(t *testing.T) {
 	// create secret containing storage config for use in the test
 	kubeClient.CoreV1().Secrets("csi-rclone").Create(context.Background(), &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pvc", Namespace: "csi-rclone"},
-		StringData: map[string]string{"configData": `[my-s3]
+		StringData: map[string]string{
+			"remote":     "my-s3",
+			"remotePath": "giab/",
+			"configData": `[my-s3]
 type=s3
 provider=AWS`},
 		Type: "Opaque",
@@ -66,10 +69,8 @@ provider=AWS`},
 	cfg.Address = endpoint
 	// cfg.SecretsFile = "testdata/secrets.yaml"
 	cfg.TestVolumeParameters = map[string]string{
-		"remote":                           "my-s3",
-		"remotePath":                       "giab",
-		"csi.storage.k8s.io/pvc/namespace": "csi-rclone",
-		"csi.storage.k8s.io/pvc/name":      "test-pvc",
+		"csi.storage.k8s.io/pvc/namespace":                       "csi-rclone",
+		"csi.storage.k8s.io/pvc/name":                            "test-pvc",
 		"csi.storage.k8s.io/provisioner-secret-name":             "rclone-secret",
 		"csi.storage.k8s.io/provisioner-secret-namespace":        "csi-rclone",
 		"csi.storage.k8s.io/controller-publish-secret-name":      "rclone-secret",
