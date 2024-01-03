@@ -3,9 +3,9 @@
 let
   myApp = pkgs.buildGoModule {
     pname = "csi-rclone-pvc-1";
-    version = "1.0.0-pre2";
+    version = "1.0.0-pre3";
     src = ../../.;
-    vendorHash = "sha256-abfl9+3cxsqIyXYYRrtbm2mk3rC+GS6dMvs0JwbO0hM=";
+    vendorHash = "sha256-F0vlfdOgCVlw6WYYvx3kOXYmT6pFjtJO2zu0GC/yrw4=";
     # CGO = 0;
     # preBuild = ''
     #   whoami

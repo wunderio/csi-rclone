@@ -34,7 +34,7 @@ type Operations interface {
 	CreateVol(ctx context.Context, volumeName, remote, remotePath, rcloneConfigPath string, pameters map[string]string) error
 	DeleteVol(ctx context.Context, rcloneVolume *RcloneVolume, rcloneConfigPath string, pameters map[string]string) error
 	Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath string, namespace string, rcloneConfigData string, pameters map[string]string) error
-	Unmount(ctx context.Context, volumeId string, namespace string) error
+	Unmount(ctx context.Context, volumeId string, targetPath string) error
 	CleanupMountPoint(ctx context.Context, secrets, pameters map[string]string) error
 	GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolume, error)
 	Cleanup()
@@ -114,14 +114,14 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 	if err != nil {
 		return fmt.Errorf("mounting failed:  err: %s", err)
 	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
 	if resp.StatusCode != 200 {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
 		return fmt.Errorf("mounting failed: couldn't create config: %s", string(body))
 	}
-	klog.Infof("created config: %s", string(body))
+	klog.Infof("created config: %s", configName)
 
 	remoteWithPath := fmt.Sprintf("%s:%s", configName, rcloneVolume.RemotePath)
 	mountArgs := MountRequest{
@@ -173,14 +173,14 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 	if err != nil {
 		return fmt.Errorf("mounting failed:  err: %s", err)
 	}
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
 	if resp.StatusCode != 200 {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
 		return fmt.Errorf("mounting failed: couldn't create mount: %s", string(body))
 	}
-	klog.Infof("created mount: %s", string(body))
+	klog.Infof("created mount: %s", configName)
 	defer resp.Body.Close()
 
 	// env := os.Environ()
@@ -256,7 +256,7 @@ func (r Rclone) DeleteVol(ctx context.Context, rcloneVolume *RcloneVolume, rclon
 func (r Rclone) Unmount(ctx context.Context, volumeId string, targetPath string) error {
 	rcloneVolume := &RcloneVolume{ID: volumeId}
 
-	klog.Infof("unmounting %s", rcloneVolume.ID)
+	klog.Infof("unmounting %s", rcloneVolume.deploymentName())
 	unmountArgs := UnmountRequest{
 		MountPoint: targetPath,
 	}

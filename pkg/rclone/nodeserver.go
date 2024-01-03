@@ -44,7 +44,6 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 
 // Mounting Volume (Actual Mounting)
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
-	klog.Infof("NodePublishVolume: called with args %+v", *req)
 	if err := validatePublishVolumeRequest(req); err != nil {
 		return nil, err
 	}
@@ -54,7 +53,6 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	volumeContext := req.GetVolumeContext()
 	secretName := volumeContext["secretName"]
 	namespace := volumeContext["namespace"]
-	klog.Infof("context: %s,%s, %s", volumeContext, req.GetPublishContext(), namespace)
 
 	pvcSecret, err := GetPvcSecret(ctx, namespace, secretName)
 	if err != nil {
@@ -220,7 +218,6 @@ func extractConfigData(parameters map[string]string) (string, map[string]string)
 
 // Unmounting Volumes
 func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
-	klog.Infof("NodeUnPublishVolume: called with args %+v", *req)
 	if err := validateUnPublishVolumeRequest(req); err != nil {
 		return nil, err
 	}
@@ -234,7 +231,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		return &csi.NodeUnpublishVolumeResponse{}, nil
 	}
 
-	if err := ns.RcloneOps.Unmount(ctx, req.GetVolumeId(), "namespace"); err != nil {
+	if err := ns.RcloneOps.Unmount(ctx, req.GetVolumeId(), targetPath); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	mount.CleanupMountPoint(req.GetTargetPath(), ns.mounter, false)
