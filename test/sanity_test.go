@@ -80,5 +80,8 @@ provider=AWS`},
 	}
 	sanity.Test(t, cfg)
 
+	// sanity just completely kills the driver, leaking the rclone daemon, so we cleanup manually
+	driver.RcloneOps.Cleanup()
+
 	kubeClient.CoreV1().Secrets("csi-rclone").Delete(context.Background(), "test-pvc", metav1.DeleteOptions{})
 }

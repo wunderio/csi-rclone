@@ -25,10 +25,10 @@ type controllerServer struct {
 func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
 	volId := req.GetVolumeId()
 	if len(volId) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "DeteleVolume must be provided volume id")
+		return nil, status.Error(codes.InvalidArgument, "ValidateVolumeCapabilities must be provided volume id")
 	}
 	if len(req.GetVolumeCapabilities()) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "CreateVolume without capabilities")
+		return nil, status.Error(codes.InvalidArgument, "ValidateVolumeCapabilities without capabilities")
 	}
 
 	cs.mutex.Lock()

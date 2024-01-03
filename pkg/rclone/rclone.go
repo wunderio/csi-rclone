@@ -1,6 +1,7 @@
 package rclone
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -383,16 +384,24 @@ func (r *Rclone) run_daemon() error {
 
 	env := os.Environ()
 	cmd := os_exec.Command(rclone_cmd, rclone_args...)
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		panic("couldn't get stderr of rclone process")
+	}
+	scanner := bufio.NewScanner(stderr)
 	cmd.Env = env
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 	r.process = cmd.Process.Pid
 	go func() {
+		output := ""
+		for scanner.Scan() {
+			output = scanner.Text()
+		}
 		err := cmd.Wait()
 		if err != nil {
-			klog.Errorf("background process failed with: %s", err)
-			panic(fmt.Sprintf("background exited"))
+			klog.Errorf("background process failed with: %s,%s", output, err)
 		}
 	}()
 	return nil
