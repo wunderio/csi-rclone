@@ -1,0 +1,44 @@
+name: Run Tests
+on: 
+  pull_request:
+    types: [ opened, reopened, synchronize ]
+    branches:
+      - "**"
+      - "!master"
+  push:
+    branches:
+      - master
+    tags:
+      - "v*.*.*"
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install fuse
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fuse3 
+          sudo bash -c 'echo "user_allow_other" >> /etc/fuse.conf'
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+      - uses: cachix/install-nix-action@v22
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: Flake check
+        run: nix flake check
+      - name: Run tests
+        uses: workflow/nix-shell-action@v3.3.0
+        with:
+          flakes-from-devshell: true
+          script: |
+            init-kind-cluster
+            local-deploy
+            get-kind-kubeconfig
+            go test -v ./...
+      - name: Print rclone log
+        if: ${{ failure() }}
+        run: cat /tmp/rclone.log
+          
+    
