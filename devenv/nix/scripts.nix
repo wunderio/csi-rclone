@@ -47,7 +47,7 @@ let
        kind load docker-image csi-rclone:latest  --name csi-rclone-k8s
   
        echo "Render helm chart with new container version"
-       helm template -n csi-rclone csi-rclone deploy/chart > devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml
+       helm template -n csi-rclone csi-rclone deploy/csi-rclone > devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml
   
        # TODO: use tee
   

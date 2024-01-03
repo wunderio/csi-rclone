@@ -1,0 +1,35 @@
+name: Publish chart
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+jobs:
+  publish-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+      - uses: azure/setup-helm@v3
+        with:
+          token: ${{secrets.GITHUB_TOKEN }}
+      - name: install dependencies
+        run: pip install chartpress
+      - name: Publish chart and images
+        env:
+          DOCKER_USERNAME: ${{ secrets.RENKU_DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.RENKU_DOCKER_PASSWORD }}
+        run: |
+          cd deploy
+          git config --global user.email "renku@datascience.ch"
+          git config --global user.name "Renku Bot"
+          echo ${DOCKER_PASSWORD}|docker login -u ${DOCKER_USERNAME} --password-stdin
+          export TAG=${echo ${GITHUB_REF} |cut -d/ -f3}
+          helm dep update csi-rclone
+          chartpress --tag $TAG
+          helm lint csi-rclone
+          chartpress --tag $TAG --push --publish-chart
+          chartpress --tag latest --push
+          

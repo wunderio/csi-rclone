@@ -1,0 +1,14 @@
+charts:
+  - name: csi-rclone
+    imagePrefix: renku/
+    resetTag: ""
+    resetVersion: 0.1.0
+    repo:
+      git: SwissDataScienceCenter/helm-charts
+      published: https://swissdatasciencecenter.github.io/helm-charts
+    images:
+      csi-rclone:
+        contextPath: ../
+        dockerFilePath: ../Dockerfile
+        valuesPath:
+          - image
