@@ -1,30 +1,30 @@
 package rclone
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"bufio"
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
+	"io"
+	"net/http"
 	"os"
-	"reflect"
+	os_exec "os/exec"
+	"syscall"
+
 	"strings"
 	"time"
 
 	"golang.org/x/net/context"
-	v1 "k8s.io/api/apps/v1"
+	"gopkg.in/ini.v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/client/conditions"
 	"k8s.io/utils/exec"
-	"k8s.io/utils/pointer"
 )
 
 var (
@@ -34,16 +34,16 @@ var (
 type Operations interface {
 	CreateVol(ctx context.Context, volumeName, remote, remotePath, rcloneConfigPath string, pameters map[string]string) error
 	DeleteVol(ctx context.Context, rcloneVolume *RcloneVolume, rcloneConfigPath string, pameters map[string]string) error
-	Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath string, rcloneConfigData string, pameters map[string]string) error
-	Unmount(ctx context.Context, volumeId string) error
-	CleanupMountPoint(ctx context.Context, secrets, pameters map[string]string) error
+	Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath string, namespace string, rcloneConfigData string, pameters map[string]string) error
+	Unmount(ctx context.Context, volumeId string, targetPath string) error
 	GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolume, error)
+	Cleanup()
 }
 
 type Rclone struct {
 	execute    exec.Interface
 	kubeClient *kubernetes.Clientset
-	namespace  string
+	process    int
 }
 
 type RcloneVolume struct {
@@ -51,283 +51,119 @@ type RcloneVolume struct {
 	RemotePath string
 	ID         string
 }
+type MountRequest struct {
+	Fs         string   `json:"fs"`
+	MountPoint string   `json:"mountPoint"`
+	VfsOpt     VfsOpt   `json:"vfsOpt"`
+	MountOpt   MountOpt `json:"mountOpt"`
+}
 
-func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath, rcloneConfigData string, parameters map[string]string) error {
-	//mountingTargetPath := filepath.Dir(targetPath)
-	//mountingFolderName := filepath.Base(targetPath)
-	mountArgs := []string{}
-	//containerMountPath := fmt.Sprintf("/mount/%s", mountingFolderName)
-	mountArgs = append(mountArgs, "mount")
-	mountArgs = append(mountArgs, fmt.Sprintf("%s:/%s", rcloneVolume.Remote, rcloneVolume.RemotePath))
-	mountArgs = append(mountArgs, targetPath)
-	defaultFlags := map[string]string{}
-	defaultFlags["rc"] = ""
-	defaultFlags["rc-addr"] = "0.0.0.0:5572"
-	defaultFlags["rc-enable-metrics"] = ""
-	defaultFlags["rc-no-auth"] = ""
-	defaultFlags["volname"] = rcloneVolume.ID
-	defaultFlags["devname"] = rcloneVolume.ID
-	defaultFlags["cache-info-age"] = "72h"
-	defaultFlags["cache-chunk-clean-interval"] = "15m"
-	defaultFlags["dir-cache-time"] = "60s"
-	defaultFlags["vfs-cache-mode"] = "off"
+type VfsOpt struct {
+	CacheMode    string `json:"cacheMode"`
+	DirCacheTime int    `json:"dirCacheTime"`
+}
+type MountOpt struct {
+	AllowNonEmpty bool `json:"allowNonEmpty"`
+	AllowOther    bool `json:"allowOther"`
+}
+type ConfigCreateRequest struct {
+	Name        string                 `json:"name"`
+	Parameters  map[string]string      `json:"parameters"`
+	StorageType string                 `json:"type"`
+	Opt         map[string]interface{} `json:"opt"`
+}
 
-	defaultFlags["allow-other"] = "true"
-	defaultFlags["allow-non-empty"] = "true"
-	// Add default flags
-	for k, v := range defaultFlags {
-		// Exclude overriden flags
-		if _, ok := parameters[k]; !ok {
-			if v != "" {
-				mountArgs = append(mountArgs, fmt.Sprintf("--%s=%s", k, v))
-			} else {
-				mountArgs = append(mountArgs, fmt.Sprintf("--%s", k))
-			}
-		}
+type UnmountRequest struct {
+	MountPoint string `json:"mountPoint"`
+}
+type ConfigDeleteRequest struct {
+	Name string `json:"name"`
+}
+
+func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath, namespace string, rcloneConfigData string, parameters map[string]string) error {
+	configName := rcloneVolume.deploymentName()
+	cfg, err := ini.Load([]byte(rcloneConfigData))
+	if err != nil {
+		return fmt.Errorf("mounting failed: couldn't load config %s", err)
 	}
-
-	// Add user supplied flags
-	for k, v := range parameters {
-		if v != "" {
-			mountArgs = append(mountArgs, fmt.Sprintf("--%s=%s", k, v))
-		} else {
-			mountArgs = append(mountArgs, fmt.Sprintf("--%s", k))
+	secs := cfg.Sections()
+	if len(secs) != 2 { //there's also a DEFAULT section
+		return fmt.Errorf("Mounting failed: expected only one config section: %s", cfg.SectionStrings())
+	}
+	sec := secs[1]
+	params := make(map[string]string)
+	for _, key := range sec.KeyStrings() {
+		if key == "type" {
+			continue
 		}
+		params[key] = sec.Key(key).String()
+	}
+	configOpts := ConfigCreateRequest{
+		Name:        configName,
+		StorageType: sec.Key("type").String(),
+		Parameters:  params,
+		Opt:         map[string]interface{}{"obscure": true},
+	}
+	klog.Infof("executing create config command  args=%v, targetpath=%s", configName, targetPath)
+	postBody, err := json.Marshal(configOpts)
+	if err != nil {
+		return fmt.Errorf("mounting failed: couldn't create request body: %s", err)
+	}
+	requestBody := bytes.NewBuffer(postBody)
+	resp, err := http.Post("http://localhost:5572/config/create", "application/json", requestBody)
+	if err != nil {
+		return fmt.Errorf("mounting failed:  err: %s", err)
+	}
+	if resp.StatusCode != 200 {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("mounting failed: couldn't create config: %s", string(body))
+	}
+	klog.Infof("created config: %s", configName)
+
+	remoteWithPath := fmt.Sprintf("%s:%s", configName, rcloneVolume.RemotePath)
+	mountArgs := MountRequest{
+		Fs:         remoteWithPath,
+		MountPoint: targetPath,
+		VfsOpt: VfsOpt{
+			CacheMode:    "off",
+			DirCacheTime: 60,
+		},
+		MountOpt: MountOpt{
+			AllowNonEmpty: true,
+			AllowOther:    true,
+		},
 	}
 
 	// create target, os.Mkdirall is noop if it exists
-	err := os.MkdirAll(targetPath, 0750)
+	err = os.MkdirAll(targetPath, 0750)
 	if err != nil {
 		return err
 	}
-
-	// Wait time for VFS write back
-	timeWaitVFS := time.Duration(0)
-	waitCommand := ""
-	if cacheMode, ok := parameters["vfs-cache-mode"]; ok {
-		if cacheMode != "off" {
-			if vfsWriteBack, ok := parameters["vfs-write-back"]; ok {
-				timeWaitVFS, err = time.ParseDuration(vfsWriteBack)
-				if err != nil {
-					return err
-				}
-			} else {
-				timeWaitVFS = 5 * time.Second
-			}
-			waitCommand = "echo \"Waiting for transfers to complete\" > /proc/1/fd/1; " +
-				`while [ $( rclone rc vfs/stats | tr -d '\n' | sed -E 's/^\{(.*,)?\s*"diskCache"\s*:\s*\{(.*,)?\s*"(uploadsQueued|uploadsInProgress)"\s*:\s*([0-9]+)\s*(,.*)?,\s*"(uploadsQueued|uploadsInProgress)"\s*:\s*([0-9]+)\s*(,.*)?\}.*\}/\4 + \7/' | bc ) -gt 0 ] ; do sleep 1; done; ` +
-				"echo \"Done waiting\" > /proc/1/fd/1; "
-		}
+	klog.Infof("executing mount command  args=%v, targetpath=%s", mountArgs, targetPath)
+	postBody, err = json.Marshal(mountArgs)
+	if err != nil {
+		return fmt.Errorf("mounting failed: couldn't create request body: %s", err)
 	}
-
-	//deploymentName := fmt.Sprintf("%s%d", rcloneVolume.deploymentName(), uuid.New().ID())
-	deploymentName := rcloneVolume.deploymentName()
-	h := sha256.New()
-	h.Write([]byte(rcloneConfigData))
-	secretHash := hex.EncodeToString(h.Sum(nil))[:63]
-	mountPropagation := corev1.MountPropagationBidirectional
-	hostPathCreate := corev1.HostPathDirectoryOrCreate
-	pvDeploymentLabels := map[string]string{
-		"volumeid": rcloneVolume.ID,
-		"hash":     secretHash,
+	requestBody = bytes.NewBuffer(postBody)
+	resp, err = http.Post("http://localhost:5572/mount/mount", "application/json", requestBody)
+	if err != nil {
+		return fmt.Errorf("mounting failed:  err: %s", err)
 	}
-
-	secret, err := r.kubeClient.CoreV1().Secrets(r.namespace).Get(deploymentName, metav1.GetOptions{})
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return err
-	}
-
-	if !reflect.DeepEqual(secret.Labels, pvDeploymentLabels) {
-		err = r.kubeClient.CoreV1().Secrets(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return err
-		}
-
-		_, err = r.kubeClient.CoreV1().Secrets(r.namespace).Create(&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      deploymentName,
-				Namespace: r.namespace,
-				Labels:    pvDeploymentLabels,
-			},
-			StringData: map[string]string{
-				"rclone.conf": rcloneConfigData,
-			},
-			Type: corev1.SecretTypeOpaque,
-		})
-
+	if resp.StatusCode != 200 {
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}
+		return fmt.Errorf("mounting failed: couldn't create mount: %s", string(body))
 	}
+	klog.Infof("created mount: %s", configName)
+	defer resp.Body.Close()
 
-	deployment, err := r.kubeClient.AppsV1().Deployments(r.namespace).Get(deploymentName, metav1.GetOptions{})
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return err
-	}
-
-	if !reflect.DeepEqual(deployment.Labels, pvDeploymentLabels) {
-		err = r.kubeClient.AppsV1().Deployments(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return err
-		}
-
-		r.kubeClient.AppsV1().Deployments(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
-		_, err = r.kubeClient.AppsV1().Deployments(r.namespace).Create(&v1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      deploymentName,
-				Namespace: r.namespace,
-				Labels:    pvDeploymentLabels,
-			},
-			Spec: v1.DeploymentSpec{
-				Replicas: pointer.Int32Ptr(1),
-				Selector: &metav1.LabelSelector{
-					MatchLabels: pvDeploymentLabels,
-				},
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: pvDeploymentLabels,
-					},
-					Spec: corev1.PodSpec{
-						NodeName:          os.Getenv("NODE_ID"),
-						RestartPolicy:     corev1.RestartPolicyAlways,
-						PriorityClassName: "system-cluster-critical",
-						// More time for transfers to complete
-						TerminationGracePeriodSeconds: pointer.Int64Ptr(900 + int64(math.Ceil(timeWaitVFS.Seconds()))),
-						Volumes: []corev1.Volume{
-							{
-								Name: "mount",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: targetPath,
-										Type: &hostPathCreate,
-									},
-								},
-							},
-							{
-								Name: "config",
-								VolumeSource: corev1.VolumeSource{
-									Secret: &corev1.SecretVolumeSource{
-										SecretName: deploymentName,
-										Items: []corev1.KeyToPath{
-											{
-												Key:  "rclone.conf",
-												Path: "rclone.conf",
-												Mode: pointer.Int32Ptr(0777),
-											},
-										},
-										Optional: pointer.BoolPtr(false),
-									},
-								},
-							},
-						},
-						Containers: []corev1.Container{
-							{
-								Name:    "rclone-mounter",
-								Image:   "rclone/rclone:1.62.2",
-								Command: []string{"rclone"},
-								Args:    mountArgs,
-								Ports: []corev1.ContainerPort{
-									{
-										Name:          "api",
-										ContainerPort: 5572,
-										Protocol:      "TCP",
-									},
-								},
-								Lifecycle: &corev1.Lifecycle{
-									PreStop: &corev1.Handler{
-										// Do not umount until all transfers finished.
-										Exec: &corev1.ExecAction{
-											Command: []string{"/bin/sh", "-c", waitCommand + " umount " + targetPath},
-										},
-									},
-								},
-								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      "config",
-										MountPath: "/root/.config/rclone/",
-									},
-									{
-										Name:             "mount",
-										MountPath:        targetPath,
-										MountPropagation: &mountPropagation,
-									},
-								},
-								SecurityContext: &corev1.SecurityContext{
-									Capabilities: &corev1.Capabilities{
-										Add: []corev1.Capability{"SYS_ADMIN"},
-									},
-									Privileged: pointer.BoolPtr(true),
-								},
-								LivenessProbe: &corev1.Probe{
-									InitialDelaySeconds: 1,
-									TimeoutSeconds:      5,
-									PeriodSeconds:       10,
-									SuccessThreshold:    1,
-									FailureThreshold:    10,
-									Handler: corev1.Handler{
-										Exec: &corev1.ExecAction{
-											Command: []string{"sh", "-c", fmt.Sprintf("ls -lah %s", targetPath)},
-										},
-									},
-								},
-								ReadinessProbe: &corev1.Probe{
-									InitialDelaySeconds: 1,
-									TimeoutSeconds:      5,
-									PeriodSeconds:       10,
-									SuccessThreshold:    1,
-									FailureThreshold:    10,
-									Handler: corev1.Handler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/metrics",
-											Port: intstr.FromInt(5572),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				Strategy: v1.DeploymentStrategy{
-					Type: v1.RecreateDeploymentStrategyType,
-				},
-			},
-		})
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }
-
-func ListSecretsByLabel(client *kubernetes.Clientset, namespace string, lab map[string]string) (*corev1.SecretList, error) {
-	return client.CoreV1().Secrets(namespace).List(metav1.ListOptions{
-		LabelSelector: labels.FormatLabels(lab),
-	})
-}
-
-func DeleteSecretsByLabel(client *kubernetes.Clientset, namespace string, lab map[string]string) error {
-	//propagation := metav1.DeletePropagationBackground
-	return client.CoreV1().Secrets(namespace).DeleteCollection(&metav1.DeleteOptions{
-		//PropagationPolicy: &propagation,
-	},
-		metav1.ListOptions{
-			LabelSelector: labels.FormatLabels(lab),
-		})
-}
-
-func DeleteDeploymentByLabel(client *kubernetes.Clientset, namespace string, lab map[string]string) error {
-	propagation := metav1.DeletePropagationForeground
-	return client.AppsV1().Deployments(namespace).DeleteCollection(&metav1.DeleteOptions{
-		PropagationPolicy: &propagation,
-	},
-		metav1.ListOptions{
-			LabelSelector: labels.FormatLabels(lab),
-		})
-}
-
-// func (r *RcloneVolume) normalizedVolumeId() string {
-// 	return strings.ToLower(strings.ReplaceAll(r.ID, ":", "-"))
-// }
 
 func (r *RcloneVolume) deploymentName() string {
 	volumeID := fmt.Sprintf("rclone-mounter-%s", r.ID)
@@ -359,70 +195,58 @@ func (r Rclone) DeleteVol(ctx context.Context, rcloneVolume *RcloneVolume, rclon
 	return r.command("purge", rcloneVolume.Remote, rcloneVolume.RemotePath, flags)
 }
 
-func (r Rclone) Unmount(ctx context.Context, volumeId string) error {
+func (r Rclone) Unmount(ctx context.Context, volumeId string, targetPath string) error {
 	rcloneVolume := &RcloneVolume{ID: volumeId}
-	deploymentName := rcloneVolume.deploymentName()
-	// Wait for Deployment to stop
-	deployment, err := r.kubeClient.AppsV1().Deployments(r.namespace).Get(deploymentName, metav1.GetOptions{})
+
+	klog.Infof("unmounting %s", rcloneVolume.deploymentName())
+	unmountArgs := UnmountRequest{
+		MountPoint: targetPath,
+	}
+	postBody, err := json.Marshal(unmountArgs)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			err = r.kubeClient.CoreV1().Secrets(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
-			if !k8serrors.IsNotFound(err) {
-				return err
-			}
-			return nil
-		}
-		return err
+		return fmt.Errorf("unmounting failed: couldn't create request body: %s", err)
 	}
-	opts := metav1.ListOptions{
-		TypeMeta:      metav1.TypeMeta{},
-		LabelSelector: metav1.FormatLabelSelector(deployment.Spec.Selector),
+	requestBody := bytes.NewBuffer(postBody)
+	resp, err := http.Post("http://localhost:5572/mount/unmount", "application/json", requestBody)
+	if err != nil {
+		return fmt.Errorf("unmounting failed:  err: %s", err)
 	}
-	watcher, err := r.kubeClient.CoreV1().Pods(r.namespace).Watch(opts)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
-	defer watcher.Stop()
-	// Delete Deployment
-	err = r.kubeClient.AppsV1().Deployments(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("unmounting failed: couldn't delete mount: %s", string(body))
+	}
+	klog.Infof("deleted mount: %s", string(body))
+	defer resp.Body.Close()
+
+	configDelete := ConfigDeleteRequest{
+		Name: rcloneVolume.deploymentName(),
+	}
+	postBody, err = json.Marshal(configDelete)
+	if err != nil {
+		return fmt.Errorf("deleting config failed: couldn't create request body: %s", err)
+	}
+	requestBody = bytes.NewBuffer(postBody)
+	resp, err = http.Post("http://localhost:5572/config/delete", "application/json", requestBody)
+	if err != nil {
+		return fmt.Errorf("deleting config failed:  err: %s", err)
+	}
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
-	// Block until deployment deleted
-	end := false
-	klog.Infof("Waiting for pods of deployment/%s to be deleted.", deploymentName)
-	for !end {
-		select {
-		case event := <-watcher.ResultChan():
-			if event.Type == watch.Deleted {
-				end = true
-				klog.Infof("Pods of deployment/%s deleted.", deploymentName)
-			}
-		case <-ctx.Done():
-			end = true
-			klog.Infof("Pods deployment/%s waiting context done.", deploymentName)
-		}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("deleting config failed: couldn't delete mount: %s", string(body))
 	}
+	klog.Infof("deleted config: %s", string(body))
 
-	return r.kubeClient.CoreV1().Secrets(r.namespace).Delete(deploymentName, &metav1.DeleteOptions{})
-
-	/*	labelQuery := map[string]string{
-			"volumeid": rcloneVolume.ID,
-		}
-		err := DeleteDeploymentByLabel(r.kubeClient, r.namespace, labelQuery)
-		if err != nil {
-			return err
-		}
-		return DeleteSecretsByLabel(r.kubeClient, r.namespace, labelQuery)*/
-}
-
-func (r Rclone) CleanupMountPoint(ctx context.Context, secrets, pameters map[string]string) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
 func (r Rclone) GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolume, error) {
-	pvs, err := r.kubeClient.CoreV1().PersistentVolumes().List(metav1.ListOptions{})
+	pvs, err := r.kubeClient.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +261,7 @@ func (r Rclone) GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolu
 			secretRef := pv.Spec.CSI.NodePublishSecretRef
 			secrets := make(map[string]string)
 			if secretRef != nil {
-				sec, err := r.kubeClient.CoreV1().Secrets(secretRef.Namespace).Get(secretRef.Name, metav1.GetOptions{})
+				sec, err := r.kubeClient.CoreV1().Secrets(secretRef.Namespace).Get(ctx, secretRef.Name, metav1.GetOptions{})
 				if err == nil && sec != nil && len(sec.Data) > 0 {
 					secrets := make(map[string]string)
 					for k, v := range sec.Data {
@@ -445,7 +269,12 @@ func (r Rclone) GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolu
 					}
 				}
 			}
-			remote, path, _, _, err = extractFlags(pv.Spec.CSI.VolumeAttributes, secrets)
+
+			pvcSecret, err := GetPvcSecret(ctx, pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name)
+			if err != nil {
+				return nil, err
+			}
+			remote, path, _, _, err = extractFlags(pv.Spec.CSI.VolumeAttributes, secrets, pvcSecret)
 			if err != nil {
 				return nil, err
 			}
@@ -461,11 +290,65 @@ func (r Rclone) GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolu
 }
 
 func NewRclone(kubeClient *kubernetes.Clientset) Operations {
-	return &Rclone{
+	rclone := &Rclone{
 		execute:    exec.New(),
 		kubeClient: kubeClient,
-		namespace:  os.Getenv("POD_NAMESPACE"),
 	}
+	err := rclone.run_daemon()
+	if err != nil {
+		panic(fmt.Sprintf("couldn't start backround process: %s", err))
+	}
+
+	return rclone
+}
+
+func (r *Rclone) run_daemon() error {
+	f, err := os.CreateTemp("", "rclone.conf")
+	if err != nil {
+		return err
+	}
+	rclone_cmd := "rclone"
+	rclone_args := []string{}
+	rclone_args = append(rclone_args, "rcd")
+	rclone_args = append(rclone_args, "--rc-addr=:5572")
+	rclone_args = append(rclone_args, "--cache-info-age=72h")
+	rclone_args = append(rclone_args, "--cache-chunk-clean-interval=15m")
+	rclone_args = append(rclone_args, "--rc-no-auth")
+	rclone_args = append(rclone_args, "--log-file=/tmp/rclone.log")
+	rclone_args = append(rclone_args, fmt.Sprintf("--config=%s", f.Name()))
+	klog.Infof("running rclone remote control daemon cmd=%s, args=%s, ", rclone_cmd, rclone_args)
+
+	env := os.Environ()
+	cmd := os_exec.Command(rclone_cmd, rclone_args...)
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		panic("couldn't get stderr of rclone process")
+	}
+	scanner := bufio.NewScanner(stderr)
+	cmd.Env = env
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	r.process = cmd.Process.Pid
+	go func() {
+		output := ""
+		for scanner.Scan() {
+			output = scanner.Text()
+		}
+		err := cmd.Wait()
+		if err != nil {
+			klog.Errorf("background process failed with: %s,%s", output, err)
+		}
+	}()
+	return nil
+}
+func (r *Rclone) Cleanup() {
+	klog.Info("cleaning up background process")
+	p, err := os.FindProcess(r.process)
+	if err != nil {
+		return
+	}
+	p.Signal(syscall.SIGINT)
 }
 
 func (r *Rclone) command(cmd, remote, remotePath string, flags map[string]string) error {
@@ -484,58 +367,9 @@ func (r *Rclone) command(cmd, remote, remotePath string, flags map[string]string
 	klog.Infof("executing %s command cmd=rclone, remote=%s:%s", cmd, remote, remotePath)
 	out, err := r.execute.Command("rclone", args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s failed: %v cmd: 'rclone' remote: ':%s:%s' output: %q",
-			cmd, err, remote, remotePath, string(out))
+		return fmt.Errorf("%s failed: %v cmd: 'rclone' remote: '%s' remotePath:'%s' args:'%s'  output: %q",
+			cmd, err, remote, remotePath, args, string(out))
 	}
 
 	return nil
-}
-
-func WaitForPodBySelectorRunning(c kubernetes.Interface, namespace, selector string, timeout int) error {
-	podList, err := ListPods(c, namespace, selector)
-	if err != nil {
-		return err
-	}
-	if len(podList.Items) == 0 {
-		return fmt.Errorf("no pods in %s with selector %s", namespace, selector)
-	}
-
-	for _, pod := range podList.Items {
-		if err := waitForPodRunning(c, namespace, pod.Name, time.Duration(timeout)*time.Second); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-func ListPods(c kubernetes.Interface, namespace, selector string) (*corev1.PodList, error) {
-	listOptions := metav1.ListOptions{IncludeUninitialized: true, LabelSelector: selector}
-	podList, err := c.CoreV1().Pods(namespace).List(listOptions)
-
-	if err != nil {
-		return nil, err
-	}
-	return podList, nil
-}
-
-func waitForPodRunning(c kubernetes.Interface, namespace, podName string, timeout time.Duration) error {
-	return wait.PollImmediate(time.Second, timeout, isPodRunning(c, podName, namespace))
-}
-
-func isPodRunning(c kubernetes.Interface, podName, namespace string) wait.ConditionFunc {
-	return func() (bool, error) {
-		fmt.Printf(".") // progress bar!
-
-		pod, err := c.CoreV1().Pods(namespace).Get(podName, metav1.GetOptions{IncludeUninitialized: true})
-		if err != nil {
-			return false, err
-		}
-
-		switch pod.Status.Phase {
-		case corev1.PodRunning:
-			return true, nil
-		case corev1.PodFailed, corev1.PodSucceeded:
-			return false, conditions.ErrPodCompleted
-		}
-		return false, nil
-	}
 }

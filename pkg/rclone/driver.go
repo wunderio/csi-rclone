@@ -1,11 +1,15 @@
 package rclone
 
 import (
+	"sync"
+
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/util/mount"
+	"k8s.io/utils/mount"
+
+	utilexec "k8s.io/utils/exec"
 )
 
 type Driver struct {
@@ -15,12 +19,12 @@ type Driver struct {
 	ns        *nodeServer
 	cap       []*csi.VolumeCapability_AccessMode
 	cscap     []*csi.ControllerServiceCapability
-	rcloneOps Operations
+	RcloneOps Operations
 }
 
 var (
 	DriverName    = "csi-rclone"
-	DriverVersion = "dario"
+	DriverVersion = "SwissDataScienceCenter"
 )
 
 func NewDriver(nodeID, endpoint string, kubeClient *kubernetes.Clientset) *Driver {
@@ -28,11 +32,11 @@ func NewDriver(nodeID, endpoint string, kubeClient *kubernetes.Clientset) *Drive
 
 	d := &Driver{}
 	d.endpoint = endpoint
-	d.rcloneOps = NewRclone(kubeClient)
+	d.RcloneOps = NewRclone(kubeClient)
 
 	d.csiDriver = csicommon.NewCSIDriver(DriverName, DriverVersion, nodeID)
 	d.csiDriver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{
-		csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER,
+		csi.VolumeCapability_AccessMode_SINGLE_NODE_SINGLE_WRITER,
 	})
 	d.csiDriver.AddControllerServiceCapabilities(
 		[]csi.ControllerServiceCapability_RPC_Type{
@@ -48,9 +52,9 @@ func NewNodeServer(d *Driver) *nodeServer {
 		DefaultNodeServer: csicommon.NewDefaultNodeServer(d.csiDriver),
 		mounter: &mount.SafeFormatAndMount{
 			Interface: mount.New(""),
-			Exec:      mount.NewOsExec(),
+			Exec:      utilexec.New(),
 		},
-		RcloneOps: d.rcloneOps,
+		RcloneOps: d.RcloneOps,
 	}
 }
 
@@ -58,12 +62,15 @@ func NewControllerServer(d *Driver) *controllerServer {
 	return &controllerServer{
 		// Creating and passing the NewDefaultControllerServer is useless and unecessary
 		DefaultControllerServer: csicommon.NewDefaultControllerServer(d.csiDriver),
-		RcloneOps:               d.rcloneOps,
+		RcloneOps:               d.RcloneOps,
+		active_volumes:          map[string]int64{},
+		mutex:                   sync.RWMutex{},
 	}
 }
 
 func (d *Driver) Run() {
 	s := csicommon.NewNonBlockingGRPCServer()
+	defer d.RcloneOps.Cleanup()
 	s.Start(d.endpoint,
 		csicommon.NewDefaultIdentityServer(d.csiDriver),
 		NewControllerServer(d),
