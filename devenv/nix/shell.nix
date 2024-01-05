@@ -3,6 +3,8 @@ let
   optionalPkgs = with pkgs; if stdenv.isDarwin then [
     macfuse-stubs
   ] else [];
+  scripts = import ./scripts.nix { inherit pkgs; };
+  inherit (scripts) initKindCluster deleteKindCluster getKindKubeconfig localDeployScript reloadScript;
 in
 pkgs.mkShell {
   packages = with pkgs; [
@@ -38,7 +40,7 @@ pkgs.mkShell {
     # Nix
     nil # LSP
     nixfmt # Formatter
-  ] ++ optionalPkgs;
+  ] ++ optionalPkgs ++ [initKindCluster deleteKindCluster getKindKubeconfig localDeployScript reloadScript];
 
   shellHook = ''
     export PROJECT_ROOT="$(pwd)"
