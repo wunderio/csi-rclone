@@ -1,4 +1,4 @@
-{ pkgs, containerPkgs, myAppLinux }:
+{ pkgs, containerPkgs, csiDriverLinux}:
 
 pkgs.dockerTools.streamLayeredImage {
   name = "csi-rclone";
@@ -6,7 +6,7 @@ pkgs.dockerTools.streamLayeredImage {
   architecture = "amd64";
 
   contents = [
-    myAppLinux
+    csiDriverLinux
 
     containerPkgs.bashInteractive
     containerPkgs.cacert

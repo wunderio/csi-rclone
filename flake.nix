@@ -11,9 +11,9 @@
         containerPkgs = import nixpkgs { localSystem = system; crossSystem = "x86_64-linux"; };
 
         goModule = import ./devenv/nix/goModule.nix { inherit pkgs; };
-        inherit (goModule) myApp myAppLinux;
+        inherit (goModule) csiDriver csiDriverLinux;
 
-        dockerLayerdImage = import ./devenv/nix/containerImage.nix { inherit pkgs containerPkgs myAppLinux; };
+        dockerLayerdImage = import ./devenv/nix/containerImage.nix { inherit pkgs containerPkgs csiDriverLinux; };
         
         scripts = import ./devenv/nix/scripts.nix { inherit pkgs; };
         inherit (scripts) initKindCluster deleteKindCluster getKindKubeconfig localDeployScript reloadScript;
@@ -22,8 +22,8 @@
       {
         devShells.default = import ./devenv/nix/shell.nix { inherit pkgs; };
 
-        packages.csi-rclone-binary = myApp;
-        packages.csi-rclone-binary-linux = myAppLinux;
+        packages.csi-rclone-binary = csiDriver;
+        packages.csi-rclone-binary-linux = csiDriverLinux;
         packages.csi-rclone-container-layerd = dockerLayerdImage;
         packages.deployToKind = localDeployScript;
         packages.reload = reloadScript;

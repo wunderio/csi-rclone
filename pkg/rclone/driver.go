@@ -1,6 +1,7 @@
 package rclone
 
 import (
+	"os"
 	"sync"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -23,18 +24,21 @@ type Driver struct {
 }
 
 var (
-	DriverName    = "csi-rclone"
 	DriverVersion = "SwissDataScienceCenter"
 )
 
 func NewDriver(nodeID, endpoint string, kubeClient *kubernetes.Clientset) *Driver {
-	klog.Infof("Starting new %s RcloneDriver in version %s", DriverName, DriverVersion)
+	driverName := os.Getenv("DRIVER_NAME")
+	if driverName == "" {
+		panic("DriverName env var not set!")
+	}
+	klog.Infof("Starting new %s RcloneDriver in version %s", driverName, DriverVersion)
 
 	d := &Driver{}
 	d.endpoint = endpoint
 	d.RcloneOps = NewRclone(kubeClient)
 
-	d.csiDriver = csicommon.NewCSIDriver(DriverName, DriverVersion, nodeID)
+	d.csiDriver = csicommon.NewCSIDriver(driverName, DriverVersion, nodeID)
 	d.csiDriver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_SINGLE_WRITER,
 	})

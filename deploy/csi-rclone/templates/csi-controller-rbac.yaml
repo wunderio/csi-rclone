@@ -287,3 +287,4 @@ subjects:
 roleRef:
   kind: Role
   name: {{ include "chart.fullname" . }}-external-provisioner-cfg
+  apiGroup: rbac.authorization.k8s.io

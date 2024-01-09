@@ -13,17 +13,12 @@ import (
 	"syscall"
 
 	"strings"
-	"time"
 
 	"golang.org/x/net/context"
 	"gopkg.in/ini.v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/client/conditions"
 	"k8s.io/utils/exec"
 )
 
@@ -34,7 +29,7 @@ var (
 type Operations interface {
 	CreateVol(ctx context.Context, volumeName, remote, remotePath, rcloneConfigPath string, pameters map[string]string) error
 	DeleteVol(ctx context.Context, rcloneVolume *RcloneVolume, rcloneConfigPath string, pameters map[string]string) error
-	Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath string, namespace string, rcloneConfigData string, pameters map[string]string) error
+	Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath string, namespace string, rcloneConfigData string, readOnly bool, pameters map[string]string) error
 	Unmount(ctx context.Context, volumeId string, targetPath string) error
 	GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolume, error)
 	Cleanup()
@@ -61,6 +56,7 @@ type MountRequest struct {
 type VfsOpt struct {
 	CacheMode    string `json:"cacheMode"`
 	DirCacheTime int    `json:"dirCacheTime"`
+	ReadOnly     bool   `json:"readOnly"`
 }
 type MountOpt struct {
 	AllowNonEmpty bool `json:"allowNonEmpty"`
@@ -80,7 +76,7 @@ type ConfigDeleteRequest struct {
 	Name string `json:"name"`
 }
 
-func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath, namespace string, rcloneConfigData string, parameters map[string]string) error {
+func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPath, namespace string, rcloneConfigData string, readOnly bool, parameters map[string]string) error {
 	configName := rcloneVolume.deploymentName()
 	cfg, err := ini.Load([]byte(rcloneConfigData))
 	if err != nil {
@@ -130,6 +126,7 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 		VfsOpt: VfsOpt{
 			CacheMode:    "off",
 			DirCacheTime: 60,
+			ReadOnly:     readOnly,
 		},
 		MountOpt: MountOpt{
 			AllowNonEmpty: true,
@@ -160,6 +157,7 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 		return fmt.Errorf("mounting failed: couldn't create mount: %s", string(body))
 	}
 	klog.Infof("created mount: %s", configName)
+
 	defer resp.Body.Close()
 
 	return nil
@@ -216,7 +214,13 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string, targetPath string)
 		return err
 	}
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("unmounting failed: couldn't delete mount: %s", string(body))
+		var result map[string]interface{}
+		json.Unmarshal(body, &result)
+		errorMsg, found := result["error"]
+		if !found || errorMsg != "mount not found" {
+			// if the mount errored out, we'd get mount not found and want to continue
+			return fmt.Errorf("unmounting failed: couldn't delete mount: %s", string(body))
+		}
 	}
 	klog.Infof("deleted mount: %s", string(body))
 	defer resp.Body.Close()
@@ -238,7 +242,8 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string, targetPath string)
 		return err
 	}
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("deleting config failed: couldn't delete mount: %s", string(body))
+		//don't error here so storage can be successfully unmounted
+		klog.Errorf("deleting config failed: couldn't delete mount: %s", string(body))
 	}
 	klog.Infof("deleted config: %s", string(body))
 
@@ -246,7 +251,7 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string, targetPath string)
 }
 
 func (r Rclone) GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolume, error) {
-	pvs, err := r.kubeClient.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
+	pvs, err := r.kubeClient.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("name=%s", volumeId)})
 	if err != nil {
 		return nil, err
 	}

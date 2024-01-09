@@ -18,10 +18,14 @@ spec:
     spec:
       serviceAccountName: {{ include "chart.fullname" . }}-controller
       containers:
-      - args: {{- toYaml .Values.csiControllerRclone.csiAttacher.args | nindent 8 }}
+      - args: 
+        - --v=5
+        - --csi-address=$(ADDRESS)
+        - --leader-election
+
         env:
         - name: ADDRESS
-          value: {{ quote .Values.csiControllerRclone.csiAttacher.env.address }}
+          value: "/csi/csi.sock"
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
         image: {{ .Values.csiControllerRclone.csiAttacher.image.repository }}:{{ .Values.csiControllerRclone.csiAttacher.image.tag | default .Chart.AppVersion }}
@@ -31,10 +35,13 @@ spec:
         volumeMounts:
         - mountPath: /csi
           name: socket-dir
-      - args: {{- toYaml .Values.csiControllerRclone.csiProvisioner.args | nindent 8 }}
+      - args:
+        - --csi-address=$(ADDRESS)
+        - --capacity-ownerref-level=0
+        - "--extra-create-metadata" # do not remove this, it is required for correct functioning
         env:
         - name: ADDRESS
-          value: {{ quote .Values.csiControllerRclone.csiProvisioner.env.address }}
+          value: "/csi/csi.sock"
         - name: NAMESPACE
           valueFrom:
             fieldRef:
@@ -49,14 +56,20 @@ spec:
         volumeMounts:
           - name: socket-dir
             mountPath: /csi
-      - args: {{- toYaml .Values.csiControllerRclone.rclone.args | nindent 8 }}
+      - args:
+        - /bin/csi-rclone-plugin
+        - run
+        - --nodeid=$(NODE_ID)
+        - --endpoint=$(CSI_ENDPOINT)
         env:
+        - name: DRIVER_NAME
+          value: {{ .Values.storageClassName | quote}}
         - name: NODE_ID
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
         - name: CSI_ENDPOINT
-          value: {{ quote .Values.csiControllerRclone.rclone.env.csiEndpoint }}
+          value: "unix://plugin/csi.sock"
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
         image: {{ .Values.csiControllerRclone.rclone.image.repository }}:{{ .Values.csiControllerRclone.rclone.image.tag | default .Chart.AppVersion }}

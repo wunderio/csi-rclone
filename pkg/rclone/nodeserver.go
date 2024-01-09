@@ -51,6 +51,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	targetPath := req.GetTargetPath()
 	volumeId := req.GetVolumeId()
 	volumeContext := req.GetVolumeContext()
+	readOnly := req.GetReadonly()
 	secretName := volumeContext["secretName"]
 	namespace := volumeContext["namespace"]
 
@@ -97,7 +98,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		Remote:     remote,
 		RemotePath: remotePath,
 	}
-	err = ns.RcloneOps.Mount(ctx, rcloneVol, targetPath, namespace, configData, flags)
+	err = ns.RcloneOps.Mount(ctx, rcloneVol, targetPath, namespace, configData, readOnly, flags)
 	if err != nil {
 		if os.IsPermission(err) {
 			return nil, status.Error(codes.PermissionDenied, err.Error())
@@ -218,20 +219,24 @@ func extractConfigData(parameters map[string]string) (string, map[string]string)
 
 // Unmounting Volumes
 func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
+	klog.Infof("NodeUnpublishVolume called with: %s", req)
 	if err := validateUnPublishVolumeRequest(req); err != nil {
 		return nil, err
 	}
 	targetPath := req.GetTargetPath()
 	if len(targetPath) == 0 {
+		klog.Warning("no target path provided for NodeUnpublishVolume")
 		return nil, status.Error(codes.InvalidArgument, "NodeUnpublishVolume Target Path must be provided")
 	}
 
 	if _, err := ns.RcloneOps.GetVolumeById(ctx, req.GetVolumeId()); err == ErrVolumeNotFound {
+		klog.Warning("VolumeId not found for NodeUnpublishVolume")
 		mount.CleanupMountPoint(req.GetTargetPath(), ns.mounter, false)
 		return &csi.NodeUnpublishVolumeResponse{}, nil
 	}
 
 	if err := ns.RcloneOps.Unmount(ctx, req.GetVolumeId(), targetPath); err != nil {
+		klog.Warningf("Unmounting volume failed: %s", err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	mount.CleanupMountPoint(req.GetTargetPath(), ns.mounter, false)

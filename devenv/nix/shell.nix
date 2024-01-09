@@ -13,7 +13,6 @@ pkgs.mkShell {
     envsubst # substitute environment variables (used for secrets)
     kind # K8s in docker
     pre-commit # Git pre-commit hooks
-    sops
     yazi # Filemanager
 
     # Go
@@ -49,6 +48,6 @@ pkgs.mkShell {
     export RCLONE_CONFIG=$PROJECT_ROOT/devenv/local-s3/switch-engine-ceph-rclone-config.conf
     
     # Load secrets as ENVs
-    eval "$("$direnv" dotenv bash <(sops -d .env))"
+    eval "$("$direnv" bash)"
   '';
 }

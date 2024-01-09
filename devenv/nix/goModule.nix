@@ -1,11 +1,11 @@
 { pkgs}:
 
 let
-  myApp = pkgs.buildGoModule {
+  csiDriver = pkgs.buildGoModule {
     pname = "csi-rclone-pvc-1";
-    version = "1.0.0-pre3";
+    version = "0.1.0";
     src = ../../.;
-    vendorHash = "sha256-F0vlfdOgCVlw6WYYvx3kOXYmT6pFjtJO2zu0GC/yrw4=";
+    vendorHash = "sha256-XY0XgDky2g7DQ210VsT+KKjyYL1EJPCNGP0F5GhY2gM=";
     # CGO = 0;
     # preBuild = ''
     #   whoami
@@ -17,9 +17,8 @@ let
     doCheck = false; # tests need docker and kind, which nixbld user might not have access to
   };
 
-  myAppLinux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux";  });
-  #myAppLinux = myApp.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux"; GOARCH = "arm64"; });
+  csiDriverLinux = csiDriver.overrideAttrs (old: old // { CGO_ENABLED = 0; GOOS = "linux";  });
 in
 {
-  inherit myApp myAppLinux;
+  inherit csiDriver csiDriverLinux ;
 }

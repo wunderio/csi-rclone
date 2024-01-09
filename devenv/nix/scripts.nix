@@ -47,12 +47,14 @@ let
        kind load docker-image csi-rclone:latest  --name csi-rclone-k8s
   
        echo "Render helm chart with new container version"
-       helm template -n csi-rclone csi-rclone deploy/chart > devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml
+       mkdir -p devenv/kind/deploy-kind
+       helm template -n csi-rclone csi-rclone deploy/csi-rclone > devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml
   
        # TODO: use tee
   
        echo "Deploy to kind cluster"
-       envsubst < devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml | kubectl apply -f -
+       kubectl create namespace csi-rclone
+       kubectl apply -f devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml 
   
        echo "Done"
      '';

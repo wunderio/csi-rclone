@@ -1,37 +1,16 @@
-namespace:
-  enabled: true
-
+storageClassName: csi-rclone 
 csiControllerRclone:
   csiAttacher:
-    args:
-    - --v=5
-    - --csi-address=$(ADDRESS)
-    - --leader-election
-    env:
-      address: /csi/csi.sock
     image:
       repository: k8s.gcr.io/sig-storage/csi-attacher
       tag: v3.4.0
     imagePullPolicy: IfNotPresent
   csiProvisioner:
-    args:
-    - --csi-address=$(ADDRESS)
-    - --capacity-ownerref-level=0
-    - "--extra-create-metadata" # do not remove this, it is required for correct functioning
-    env:
-      address: /csi/csi.sock
     image:
       repository: registry.k8s.io/sig-storage/csi-provisioner
       tag: v3.4.1
     imagePullPolicy: IfNotPresent
   rclone:
-    args:
-    - /bin/csi-rclone-plugin
-    - run
-    - --nodeid=$(NODE_ID)
-    - --endpoint=$(CSI_ENDPOINT)
-    env:
-      csiEndpoint: unix://plugin/csi.sock
     image:
       repository: csi-rclone
       tag: "latest"
@@ -51,31 +30,18 @@ csiControllerRclone:
 
 csiNodepluginRclone:
   nodeDriverRegistrar:
-    args:
-    - --v=5
-    - --csi-address=/plugin/csi.sock
-    - --kubelet-registration-path=/var/lib/kubelet/plugins/csi-rclone/csi.sock
     image:
       repository: k8s.gcr.io/sig-storage/csi-node-driver-registrar
       tag: v2.4.0
     imagePullPolicy: IfNotPresent
   rclone:
-    args:
-    - /bin/csi-rclone-plugin
-    - run
-    - --nodeid=$(NODE_ID)
-    - --endpoint=$(CSI_ENDPOINT)
     containerSecurityContext:
       allowPrivilegeEscalation: true
       capabilities:
         add:
         - SYS_ADMIN
       privileged: true
-    env:
-      csiEndpoint: unix://plugin/csi.sock
     image:
-      #repository: wunderio/csi-rclone
-      #tag: v1.3.3
       repository: csi-rclone
       tag: "latest"
     imagePullPolicy: IfNotPresent

@@ -20,7 +20,10 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       containers:
-      - args: {{- toYaml .Values.csiNodepluginRclone.nodeDriverRegistrar.args | nindent 8 }}
+      - args:
+        - --v=5
+        - --csi-address=/plugin/csi.sock
+        - --kubelet-registration-path=/var/lib/kubelet/plugins/{{ .Values.storageClassName }}/csi.sock
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -38,7 +41,7 @@ spec:
               command:
               - /bin/sh
               - -c
-              - rm -rf /registration/csi-rclone /registration/csi-rclone-reg.sock
+              - rm -rf /registration/{{ .Values.storageClassName }} /registration/{{ .Values.storageClassName }}-reg.sock
         name: node-driver-registrar
         resources: {}
         volumeMounts:
@@ -46,20 +49,22 @@ spec:
           name: plugin-dir
         - mountPath: /registration
           name: registration-dir
-      - args: {{- toYaml .Values.csiNodepluginRclone.rclone.args | nindent 8 }}
+      - args:
+        - /bin/csi-rclone-plugin
+        - run
+        - --nodeid=$(NODE_ID)
+        - --endpoint=$(CSI_ENDPOINT)
         env:
         - name: NODE_ID
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
         - name: CSI_ENDPOINT
-          value: {{ quote .Values.csiNodepluginRclone.rclone.env.csiEndpoint }}
+          value: "unix://plugin/csi.sock"
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
+        - name: DRIVER_NAME
+          value: {{ .Values.storageClassName | quote}}
         image: {{ .Values.csiNodepluginRclone.rclone.image.repository }}:{{ .Values.csiNodepluginRclone.rclone.image.tag | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.csiNodepluginRclone.rclone.imagePullPolicy }}
         # TODO: check if necessary
@@ -83,7 +88,7 @@ spec:
           name: pods-mount-dir
       volumes:
       - hostPath:
-          path: /var/lib/kubelet/plugins/csi-rclone
+          path: /var/lib/kubelet/plugins/{{ .Values.storageClassName }}
           type: DirectoryOrCreate
         name: plugin-dir
       - hostPath:

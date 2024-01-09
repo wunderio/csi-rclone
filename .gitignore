@@ -5,3 +5,4 @@ rclone-build/
 result
 kubeconfig
 .DS_Store
+devenv/kind/

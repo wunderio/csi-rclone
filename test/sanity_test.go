@@ -19,6 +19,7 @@ func TestMyDriver(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
+	os.Setenv("DRIVER_NAME", "csi-rclone")
 	driver := rclone.NewDriver("hostname", endpoint, kubeClient)
 	go driver.Run()
 	err = os.MkdirAll("/tmp/sanity/mount/", 0700)
@@ -69,14 +70,8 @@ provider=AWS`},
 	cfg.Address = endpoint
 	// cfg.SecretsFile = "testdata/secrets.yaml"
 	cfg.TestVolumeParameters = map[string]string{
-		"csi.storage.k8s.io/pvc/namespace":                       "csi-rclone",
-		"csi.storage.k8s.io/pvc/name":                            "test-pvc",
-		"csi.storage.k8s.io/provisioner-secret-name":             "rclone-secret",
-		"csi.storage.k8s.io/provisioner-secret-namespace":        "csi-rclone",
-		"csi.storage.k8s.io/controller-publish-secret-name":      "rclone-secret",
-		"csi.storage.k8s.io/controller-publish-secret-namespace": "csi-rclone",
-		"csi.storage.k8s.io/node-publish-secret-name":            "rclone-secret",
-		"csi.storage.k8s.io/node-publish-secret-namespace":       "csi-rclone",
+		"csi.storage.k8s.io/pvc/namespace": "csi-rclone",
+		"csi.storage.k8s.io/pvc/name":      "test-pvc",
 	}
 	sanity.Test(t, cfg)
 
