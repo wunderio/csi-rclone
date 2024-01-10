@@ -1,0 +1,27 @@
+Changelog
+=========
+
+v0.1.3
+------
+- fix selecting volume on node unpublish
+
+v0.1.2
+------
+
+- fix chart indentation
+
+v0.1.1
+------
+
+- add affinities and tolerations to chart.
+
+v0.1.0
+------
+
+- use PVCs for requesting mounts, with rclone config stored in a secret per mount
+- use rclone rcd in the background
+- use csi-test/sanity to ensure conformance with the csi rpec
+- remove a lot of code from the MaxSum fork that would create deployments for each mount
+- make the storage class name configurable
+- removed all the unneeded secrets that csi-rclone previously used
+- a lot of smaller bugfixes and cleanup

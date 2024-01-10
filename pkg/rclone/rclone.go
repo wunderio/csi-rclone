@@ -251,7 +251,7 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string, targetPath string)
 }
 
 func (r Rclone) GetVolumeById(ctx context.Context, volumeId string) (*RcloneVolume, error) {
-	pvs, err := r.kubeClient.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("name=%s", volumeId)})
+	pvs, err := r.kubeClient.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
