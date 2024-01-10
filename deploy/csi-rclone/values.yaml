@@ -55,4 +55,7 @@ csiNodepluginRclone:
       #   memory: 128M
   serviceAccount:
     annotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 kubernetesClusterDomain: cluster.local

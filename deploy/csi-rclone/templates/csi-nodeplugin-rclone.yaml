@@ -86,6 +86,18 @@ spec:
         - mountPath: /var/lib/kubelet/pods
           mountPropagation: Bidirectional
           name: pods-mount-dir
+      {{- with .Values.csiNodepluginRclone.nodeSelector }}
+        nodeSelector:
+          {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.csiNodepluginRclone.affinity }}
+        affinity:
+          {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.csiNodepluginRclone.tolerations }}
+        tolerations:
+          {{ toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
       - hostPath:
           path: /var/lib/kubelet/plugins/{{ .Values.storageClassName }}

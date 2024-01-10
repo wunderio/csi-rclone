@@ -3,8 +3,6 @@ on:
   pull_request:
     types: [ opened, reopened, synchronize ]
     branches:
-      - "**"
-      - "!master"
   push:
     branches:
       - master
