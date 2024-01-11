@@ -2,7 +2,7 @@ charts:
   - name: csi-rclone
     imagePrefix: renku/
     resetTag: ""
-    resetVersion: 0.1.4
+    resetVersion: 0.1.5
     repo:
       git: SwissDataScienceCenter/helm-charts
       published: https://swissdatasciencecenter.github.io/helm-charts

@@ -53,7 +53,7 @@ let
        # TODO: use tee
   
        echo "Deploy to kind cluster"
-       kubectl create namespace csi-rclone
+       kubectl create namespace csi-rclone || true
        kubectl apply -f devenv/kind/deploy-kind/csi-rclone-templated-chart.yaml 
   
        echo "Done"

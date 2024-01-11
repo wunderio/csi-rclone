@@ -11,6 +11,7 @@ import (
 	"os"
 	os_exec "os/exec"
 	"syscall"
+	"time"
 
 	"strings"
 
@@ -54,9 +55,9 @@ type MountRequest struct {
 }
 
 type VfsOpt struct {
-	CacheMode    string `json:"cacheMode"`
-	DirCacheTime int    `json:"dirCacheTime"`
-	ReadOnly     bool   `json:"readOnly"`
+	CacheMode    string        `json:"cacheMode"`
+	DirCacheTime time.Duration `json:"dirCacheTime"`
+	ReadOnly     bool          `json:"readOnly"`
 }
 type MountOpt struct {
 	AllowNonEmpty bool `json:"allowNonEmpty"`
@@ -125,7 +126,7 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 		MountPoint: targetPath,
 		VfsOpt: VfsOpt{
 			CacheMode:    "writes",
-			DirCacheTime: 60,
+			DirCacheTime: 60 * time.Second,
 			ReadOnly:     readOnly,
 		},
 		MountOpt: MountOpt{

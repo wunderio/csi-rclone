@@ -1,6 +1,11 @@
 Changelog
 =========
 
+v0.1.5
+------
+
+- fix dir-cache-time to improve speed
+
 v0.1.4
 ------
 
