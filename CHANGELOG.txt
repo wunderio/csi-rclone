@@ -1,8 +1,14 @@
 Changelog
 =========
 
+v0.1.4
+------
+
+- change to vfs-cache-mode=writes for rclone
+
 v0.1.3
 ------
+
 - fix selecting volume on node unpublish
 
 v0.1.2

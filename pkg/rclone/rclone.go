@@ -124,7 +124,7 @@ func (r *Rclone) Mount(ctx context.Context, rcloneVolume *RcloneVolume, targetPa
 		Fs:         remoteWithPath,
 		MountPoint: targetPath,
 		VfsOpt: VfsOpt{
-			CacheMode:    "off",
+			CacheMode:    "writes",
 			DirCacheTime: 60,
 			ReadOnly:     readOnly,
 		},
