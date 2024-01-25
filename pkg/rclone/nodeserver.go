@@ -247,6 +247,7 @@ func Mount(remote string, remotePath string, targetPath string, configData strin
 	defaultFlags["vfs-cache-mode"] = "writes"
 	defaultFlags["allow-non-empty"] = "true"
 	defaultFlags["allow-other"] = "true"
+	defaultFlags["vfs-cache-max-size"] = "10G"
 
 	remoteWithPath := fmt.Sprintf(":%s:%s", remote, remotePath)
 
