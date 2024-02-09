@@ -18,9 +18,9 @@ spec:
     spec:
       serviceAccountName: {{ include "chart.fullname" . }}-nodeplugin
       dnsPolicy: ClusterFirstWithHostNet
-      hostNetwork: true
       containers:
-      - args:
+      - name: node-driver-registrar
+        args:
         - --v=5
         - --csi-address=/plugin/csi.sock
         - --kubelet-registration-path=/var/lib/kubelet/plugins/{{ .Values.storageClassName }}/csi.sock
@@ -42,14 +42,22 @@ spec:
               - /bin/sh
               - -c
               - rm -rf /registration/{{ .Values.storageClassName }} /registration/{{ .Values.storageClassName }}-reg.sock
-        name: node-driver-registrar
         resources: {}
         volumeMounts:
         - mountPath: /plugin
           name: plugin-dir
         - mountPath: /registration
           name: registration-dir
-      - args:
+      - name: liveness-probe
+        imagePullPolicy: Always
+        image: registry.k8s.io/sig-storage/livenessprobe:v2.11.0
+        args:
+        - --csi-address=/plugin/csi.sock
+        volumeMounts:
+        - mountPath: /plugin
+          name: plugin-dir
+      - name: rclone
+        args:
         - /bin/csi-rclone-plugin
         - run
         - --nodeid=$(NODE_ID)
@@ -75,11 +83,22 @@ spec:
               - /bin/sh
               - -c
               - mount -t fuse.rclone | while read -r mount; do umount $(echo $mount | awk {print $3}) ; done
-        name: rclone
         resources:
           {{- toYaml .Values.csiControllerRclone.rclone.resources | nindent 12 }}
         securityContext: {{- toYaml .Values.csiNodepluginRclone.rclone.containerSecurityContext
           | nindent 10 }}
+        ports:
+          - containerPort: 9808
+            name: healthz
+            protocol: TCP
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /healthz
+            port: healthz
+          initialDelaySeconds: 30
+          timeoutSeconds: 10
+          periodSeconds: 30
         volumeMounts:
         - mountPath: /plugin
           name: plugin-dir

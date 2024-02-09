@@ -343,7 +343,13 @@ func (r *Rclone) run_daemon() error {
 		}
 		err := cmd.Wait()
 		if err != nil {
+			if exiterr, ok := err.(*os_exec.ExitError); ok {
+				if exiterr.ExitCode() == 130 {
+					return // 130 = SigInt, so normal shutdown
+				}
+			}
 			klog.Errorf("background process failed with: %s,%s", output, err)
+			panic(fmt.Sprintf("rclone background process failed: %s", err))
 		}
 	}()
 	return nil

@@ -18,7 +18,8 @@ spec:
     spec:
       serviceAccountName: {{ include "chart.fullname" . }}-controller
       containers:
-      - args: 
+      - name: csi-attacher
+        args:
         - --v=5
         - --csi-address=$(ADDRESS)
         - --leader-election
@@ -30,12 +31,12 @@ spec:
           value: {{ quote .Values.kubernetesClusterDomain }}
         image: {{ .Values.csiControllerRclone.csiAttacher.image.repository }}:{{ .Values.csiControllerRclone.csiAttacher.image.tag | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.csiControllerRclone.csiAttacher.imagePullPolicy }}
-        name: csi-attacher
         resources: {}
         volumeMounts:
         - mountPath: /csi
           name: socket-dir
-      - args:
+      - name: csi-provisioner
+        args:
         - --csi-address=$(ADDRESS)
         - --capacity-ownerref-level=0
         - "--extra-create-metadata" # do not remove this, it is required for correct functioning
@@ -52,11 +53,11 @@ spec:
               fieldPath: metadata.name
         image: {{ .Values.csiControllerRclone.csiProvisioner.image.repository }}:{{ .Values.csiControllerRclone.csiProvisioner.image.tag | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.csiControllerRclone.csiProvisioner.imagePullPolicy }}
-        name: csi-provisioner
         volumeMounts:
           - name: socket-dir
             mountPath: /csi
-      - args:
+      - name: rclone
+        args:
         - /bin/csi-rclone-plugin
         - run
         - --nodeid=$(NODE_ID)
@@ -74,11 +75,30 @@ spec:
           value: {{ quote .Values.kubernetesClusterDomain }}
         image: {{ .Values.csiControllerRclone.rclone.image.repository }}:{{ .Values.csiControllerRclone.rclone.image.tag | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.csiControllerRclone.rclone.imagePullPolicy }}
-        name: rclone
         resources:
           {{- toYaml .Values.csiControllerRclone.rclone.resources | nindent 12 }}
+        ports:
+        - containerPort: 9808
+          name: healthz
+          protocol: TCP
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /healthz
+            port: healthz
+          initialDelaySeconds: 10
+          timeoutSeconds: 3
+          periodSeconds: 2
         volumeMounts:
         - mountPath: /plugin
+          name: socket-dir
+      - name: liveness-probe
+        imagePullPolicy: Always
+        image: registry.k8s.io/sig-storage/livenessprobe:v2.11.0
+        args:
+        - --csi-address=/csi/csi.sock
+        volumeMounts:
+        - mountPath: /csi
           name: socket-dir
       volumes:
       - emptyDir: {}

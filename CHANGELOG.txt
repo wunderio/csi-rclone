@@ -1,6 +1,13 @@
 Changelog
 =========
 
+v0.1.6
+------
+
+- panic when rclone subprocess isn't running
+- add liveness probes
+- remove `hostNetwork` from hode controller
+
 v0.1.5
 ------
 
