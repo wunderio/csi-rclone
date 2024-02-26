@@ -320,17 +320,22 @@ func (r *Rclone) run_daemon() error {
 	rclone_args = append(rclone_args, "--cache-info-age=72h")
 	rclone_args = append(rclone_args, "--cache-chunk-clean-interval=15m")
 	rclone_args = append(rclone_args, "--rc-no-auth")
-	rclone_args = append(rclone_args, "--log-file=/tmp/rclone.log")
+	loglevel := os.Getenv("LOG_LEVEL")
+	if len(loglevel) == 0 {
+		loglevel = "NOTICE"
+	}
+	rclone_args = append(rclone_args, fmt.Sprintf("--log-level=%s", loglevel))
 	rclone_args = append(rclone_args, fmt.Sprintf("--config=%s", f.Name()))
 	klog.Infof("running rclone remote control daemon cmd=%s, args=%s, ", rclone_cmd, rclone_args)
 
 	env := os.Environ()
 	cmd := os_exec.Command(rclone_cmd, rclone_args...)
-	stderr, err := cmd.StderrPipe()
+	stdout, err := cmd.StdoutPipe()
+	cmd.Stderr = cmd.Stdout
 	if err != nil {
 		panic("couldn't get stderr of rclone process")
 	}
-	scanner := bufio.NewScanner(stderr)
+	scanner := bufio.NewScanner(stdout)
 	cmd.Env = env
 	if err := cmd.Start(); err != nil {
 		return err
@@ -340,6 +345,7 @@ func (r *Rclone) run_daemon() error {
 		output := ""
 		for scanner.Scan() {
 			output = scanner.Text()
+			klog.Infof("rclone log: %s", output)
 		}
 		err := cmd.Wait()
 		if err != nil {

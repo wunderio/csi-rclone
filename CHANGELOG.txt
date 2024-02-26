@@ -1,6 +1,11 @@
 Changelog
 =========
 
+v0.1.7
+------
+
+- add logging for rclone background daemon
+
 v0.1.6
 ------
 

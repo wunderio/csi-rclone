@@ -3,7 +3,7 @@
 let
   csiDriver = pkgs.buildGoModule {
     pname = "csi-rclone-pvc-1";
-    version = "0.1.6";
+    version = "0.1.7";
     src = ../../.;
     vendorHash = "sha256-XY0XgDky2g7DQ210VsT+KKjyYL1EJPCNGP0F5GhY2gM=";
     # CGO = 0;

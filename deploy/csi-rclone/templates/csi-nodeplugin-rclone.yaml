@@ -73,6 +73,8 @@ spec:
           value: {{ quote .Values.kubernetesClusterDomain }}
         - name: DRIVER_NAME
           value: {{ .Values.storageClassName | quote}}
+        - name: LOG_LEVEL
+          value: {{ .Values.logLevel | default "NOTICE" | quote }}
         image: {{ .Values.csiNodepluginRclone.rclone.image.repository }}:{{ .Values.csiNodepluginRclone.rclone.image.tag | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.csiNodepluginRclone.rclone.imagePullPolicy }}
         # TODO: check if necessary
