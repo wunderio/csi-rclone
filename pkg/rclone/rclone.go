@@ -220,7 +220,7 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string, targetPath string)
 		errorMsg, found := result["error"]
 		if !found || errorMsg != "mount not found" {
 			// if the mount errored out, we'd get mount not found and want to continue
-			return fmt.Errorf("unmounting failed: couldn't delete mount: %s", string(body))
+			klog.Errorf("unmounting failed: couldn't delete mount: %s", string(body))
 		}
 	}
 	klog.Infof("deleted mount: %s", string(body))
@@ -236,7 +236,8 @@ func (r Rclone) Unmount(ctx context.Context, volumeId string, targetPath string)
 	requestBody = bytes.NewBuffer(postBody)
 	resp, err = http.Post("http://localhost:5572/config/delete", "application/json", requestBody)
 	if err != nil {
-		return fmt.Errorf("deleting config failed:  err: %s", err)
+		klog.Errorf("deleting config failed:  err: %s", err)
+		return nil
 	}
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
