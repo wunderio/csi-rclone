@@ -6,7 +6,7 @@ import (
 	"k8s.io/klog"
 )
 
-type driver struct {
+type Driver struct {
 	csiDriver *csicommon.CSIDriver
 	endpoint  string
 
@@ -20,10 +20,10 @@ var (
 	DriverVersion = "latest"
 )
 
-func NewDriver(nodeID, endpoint string) *driver {
+func NewDriver(nodeID, endpoint string) *Driver {
 	klog.Infof("Starting new %s driver in version %s", DriverName, DriverVersion)
 
-	d := &driver{}
+	d := &Driver{}
 
 	d.endpoint = endpoint
 
@@ -34,13 +34,13 @@ func NewDriver(nodeID, endpoint string) *driver {
 	return d
 }
 
-func NewNodeServer(d *driver) *nodeServer {
+func NewNodeServer(d *Driver) *nodeServer {
 	return &nodeServer{
 		DefaultNodeServer: csicommon.NewDefaultNodeServer(d.csiDriver),
 	}
 }
 
-func (d *driver) Run() {
+func (d *Driver) Run() {
 	s := csicommon.NewNonBlockingGRPCServer()
 	s.Start(d.endpoint,
 		csicommon.NewDefaultIdentityServer(d.csiDriver),
