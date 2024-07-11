@@ -58,5 +58,6 @@ csiNodepluginRclone:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+kubeletDir: /var/lib/kubelet # Tune if running in k0s, k3s, ...
 kubernetesClusterDomain: cluster.local
 logLevel: NOTICE # Valid levels: DEBUG|INFO|NOTICE|ERROR

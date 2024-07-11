@@ -121,14 +121,14 @@ spec:
     {{- end }}
       volumes:
       - hostPath:
-          path: /var/lib/kubelet/plugins/{{ .Values.storageClassName }}
+          path: {{ .Values.kubeletDir }}/plugins/{{ .Values.storageClassName }}
           type: DirectoryOrCreate
         name: plugin-dir
       - hostPath:
-          path: /var/lib/kubelet/pods
+          path: {{ .Values.kubeletDir }}/pods
           type: Directory
         name: pods-mount-dir
       - hostPath:
-          path: /var/lib/kubelet/plugins_registry
+          path: {{ .Values.kubeletDir }}/plugins_registry
           type: DirectoryOrCreate
         name: registration-dir
