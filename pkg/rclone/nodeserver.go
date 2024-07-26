@@ -6,17 +6,21 @@ package rclone
 // Follow lifecycle
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"gopkg.in/ini.v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog"
 
 	"github.com/SwissDataScienceCenter/csi-rclone/pkg/kube"
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/fernet/fernet-go"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -59,7 +63,15 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	if err != nil {
 		return nil, err
 	}
-	remote, remotePath, configData, flags, e := extractFlags(req.GetVolumeContext(), req.GetSecrets(), pvcSecret)
+
+	savedSecretName := secretName + "-secrets"
+
+	savedPvcSecret, err := GetPvcSecret(ctx, namespace, savedSecretName)
+	if err != nil {
+		klog.Warningf("Cannot find saved secrets %s: %s", savedSecretName, err)
+	}
+
+	remote, remotePath, configData, flags, e := extractFlags(req.GetVolumeContext(), req.GetSecrets(), pvcSecret, savedPvcSecret)
 	delete(flags, "secretName")
 	delete(flags, "namespace")
 	if e != nil {
@@ -142,7 +154,7 @@ func validatePublishVolumeRequest(req *csi.NodePublishVolumeRequest) error {
 	return nil
 }
 
-func extractFlags(volumeContext map[string]string, secret map[string]string, pvcSecret *v1.Secret) (string, string, string, map[string]string, error) {
+func extractFlags(volumeContext map[string]string, secret map[string]string, pvcSecret *v1.Secret, savedPvcSecret *v1.Secret) (string, string, string, map[string]string, error) {
 
 	// Empty argument list
 	flags := make(map[string]string)
@@ -187,7 +199,57 @@ func extractFlags(volumeContext map[string]string, secret map[string]string, pvc
 
 	configData, flags := extractConfigData(flags)
 
+	if savedPvcSecret != nil {
+		if savedSecrets, err := decryptSecrets(flags, savedPvcSecret); err != nil {
+			klog.Errorf("cannot decode saved storage secrets: %s", err)
+		} else {
+			if modifiedConfigData, err := updateConfigData(remote, configData, savedSecrets); err == nil {
+				configData = modifiedConfigData
+			} else {
+				klog.Errorf("cannot update config data: %s", err)
+			}
+		}
+	}
+
 	return remote, remotePath, configData, flags, nil
+}
+
+func decryptSecrets(flags map[string]string, savedPvcSecret *v1.Secret) (map[string]string, error) {
+	savedSecrets := make(map[string]string)
+
+	userSecretKey, ok := flags["secretKey"]
+	if !ok {
+		return savedSecrets, status.Error(codes.InvalidArgument, "missing user secret key")
+	}
+	fernetKey, err := fernet.DecodeKey(userSecretKey)
+	if err != nil {
+		return savedSecrets, status.Errorf(codes.InvalidArgument, "cannot decode user secret key: %s", err)
+	}
+
+	if len(savedPvcSecret.Data) > 0 {
+		for k, v := range savedPvcSecret.Data {
+			savedSecrets[k] = string(fernet.VerifyAndDecrypt([]byte(v), 0, []*fernet.Key{fernetKey}))
+		}
+	}
+
+	return savedSecrets, nil
+}
+
+func updateConfigData(remote string, configData string, savedSecrets map[string]string) (string, error) {
+	iniData, err := ini.Load([]byte(configData))
+	if err != nil {
+		return "", fmt.Errorf("cannot load ini config data: %s", err)
+	}
+
+	section := iniData.Section(remote)
+	for k, v := range savedSecrets {
+		section.Key(k).SetValue(v)
+	}
+
+	buf := new(bytes.Buffer)
+	iniData.WriteTo(buf)
+
+	return buf.String(), nil
 }
 
 func validateFlags(flags map[string]string) error {

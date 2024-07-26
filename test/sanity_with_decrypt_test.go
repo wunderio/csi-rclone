@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestMyDriver(t *testing.T) {
+func TestMyDriverWithDecryption(t *testing.T) {
 	// Setup the full driver and its environment
 	endpoint := "unix:///tmp/plugin/csi.sock"
 	kubeClient, err := kube.GetK8sClient()
@@ -58,9 +58,17 @@ func TestMyDriver(t *testing.T) {
 			"remotePath": "giab/",
 			"secretKey":  "cw_0x689RpI-jtRR7oE8h_eQsKImvJapLeSbXpwF4e4=",
 			"configData": `[my-s3]
-type=s3
+type=<sensitive>
 provider=AWS`},
 		Type: "Opaque",
+	}, metav1.CreateOptions{})
+
+	// create secret containing saved storage secrets. `type` which is `s3` is encrypted like a secret
+	// if decryption fails, then the storage cannot be mounted
+	kubeClient.CoreV1().Secrets("csi-rclone").Create(context.Background(), &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pvc-secrets", Namespace: "csi-rclone"},
+		StringData: map[string]string{"type": "gAAAAABK-fBwYcjuQgctfZknI2ko2uLqj6DRzRa7kFTKnWm_nkjwGWGTai5eyhNXlp6_6QjeTC7B8IWvhBsvG1Q6Zk2eDYDVQg=="},
+		Type:       "Opaque",
 	}, metav1.CreateOptions{})
 
 	cfg := sanity.NewTestConfig()

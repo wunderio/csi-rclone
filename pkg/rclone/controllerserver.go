@@ -88,7 +88,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	if err != nil {
 		return nil, err
 	}
-	remote, remotePath, _, _, err := extractFlags(req.GetParameters(), req.GetSecrets(), pvcSecret)
+	remote, remotePath, _, _, err := extractFlags(req.GetParameters(), req.GetSecrets(), pvcSecret, nil)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "CreateVolume: %v", err)
 	}
