@@ -1,5 +1,5 @@
 FROM alpine:3.16
-RUN apk add --no-cache ca-certificates bash fuse curl unzip tini
+RUN apk add --no-cache ca-certificates bash fuse fuse3 curl unzip tini
 
 RUN curl https://rclone.org/install.sh | bash
 

@@ -44,7 +44,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: rclone
-          image: wunderio/csi-rclone:v1.3.1
+          image: wunderio/csi-rclone:v2.0.0
           args :
             - "/bin/csi-rclone-plugin"
             - "--nodeid=$(NODE_ID)"
