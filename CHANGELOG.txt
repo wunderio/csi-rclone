@@ -1,5 +1,21 @@
 # CHANGELOG
 
+3.0.0:
+  - Dropping support for kubernetes versions < 1.20 due to [external provisioner](https://github.com/kubernetes-csi/external-provisioner?tab=readme-ov-file#compatibility)+ compatibility requirement.
+  - PersistentVolume provisioner support. Creation of PersistentVolume and using it in PersistentVolumeClaim via selector is still supported,
+    no migration is required.
+    If PersistentVolume was setting `remotePathSuffix`, it can be added to PVC annotations as `csi-rclone/storage-path` value now (namespace can be ommited if `pathPattern` includes it - `${.PVC.namespace}/${.PVC.annotations.csi-rclone/storage-path}`).
+    If PersistentVolume was setting umask parameter, it's possible to set it in PVC annotations as `csi-rclone/umask` value now. 
+  - cluster-driver-registrar is not required anymore since deployment resources declare CSIDriver object and registrar is [deprecated](https://kubernetes-csi.github.io/docs/cluster-driver-registrar.html#deprecated).
+
+2.0.0:
+  - rclone version v1.66.0
+  - Custom rclone build (directory markers) removed since it's available in the official binary now
+  - Separate cache paths for each mount process + cache removal on unmount
+  - Remote control API endpoint for each mount process, this allows transfer state and vfs upload buffer queue monitoring
+  - Delay rclone process shutdown until upload queue is empty (There's an additional timeout of 1 hour. That should be enough even for bigger files)
+  - Graceful failover for plugin preStart
+
 1.3.0: 
   - Container init changed to tini
-  - rclone plugin version v1.59.2
+  - rclone version v1.59.2

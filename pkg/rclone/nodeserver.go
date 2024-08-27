@@ -14,9 +14,9 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/golang/glog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -58,7 +58,7 @@ func (ns *nodeServer) deleteMountContext(targetPath string) {
 }
 
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
-	klog.Infof("NodePublishVolume: called with args %+v", *req)
+	glog.V(4).Infof("NodePublishVolume: called with args %+v", *req)
 
 	targetPath := req.GetTargetPath()
 
@@ -77,11 +77,11 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	if !notMnt {
 		// testing original mount point, make sure the mount link is valid
 		if _, err := ioutil.ReadDir(targetPath); err == nil {
-			klog.Infof("already mounted to target %s", targetPath)
+			glog.V(4).Infof("already mounted to target %s", targetPath)
 			return &csi.NodePublishVolumeResponse{}, nil
 		}
 		// todo: mount link is invalid, now unmount and remount later (built-in functionality)
-		klog.Warningf("ReadDir %s failed with %v, unmount this directory", targetPath, err)
+		glog.Warningf("ReadDir %s failed with %v, unmount this directory", targetPath, err)
 
 		ns.mounter = &mount.SafeFormatAndMount{
 			Interface: mount.New(""),
@@ -89,7 +89,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		}
 
 		if err := ns.mounter.Unmount(targetPath); err != nil {
-			klog.Errorf("Unmount directory %s failed with %v", targetPath, err)
+			glog.Errorf("Unmount directory %s failed with %v", targetPath, err)
 			return nil, err
 		}
 	}
@@ -104,7 +104,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 	remote, remotePath, configData, flags, e := extractFlags(req.GetVolumeContext(), secret)
 	if e != nil {
-		klog.Warningf("storage parameter error: %s", e)
+		glog.Warningf("storage parameter error: %s", e)
 		return nil, e
 	}
 
@@ -140,7 +140,7 @@ func extractFlags(volumeContext map[string]string, secret *v1.Secret) (string, s
 			flags[k] = string(v)
 		}
 	} else {
-		klog.Infof("No csi-rclone connection defaults secret found.")
+		glog.V(4).Infof("No csi-rclone connection defaults secret found.")
 	}
 
 	if len(volumeContext) > 0 {
@@ -289,30 +289,28 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 
 	if notMnt && !mount.IsCorruptedMnt(err) {
-		klog.Infof("Volume not mounted")
+		glog.V(4).Infof("Volume not mounted")
 
 	} else {
 		err = util.UnmountPath(req.GetTargetPath(), m)
 		if err != nil {
-			klog.Infof("Error while unmounting path: %s", err)
+			glog.V(4).Infof("Error while unmounting path: %s", err)
 			// This will exit and fail the NodeUnpublishVolume making it to retry unmount on the next api schedule trigger.
 			// Since we mount the volume with allow-non-empty now, we could skip this one too.
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 
-		klog.Infof("Volume %s unmounted successfully", req.VolumeId)
+		glog.V(4).Infof("Volume %s unmounted successfully", req.VolumeId)
 	}
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
 func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
-	klog.Infof("NodeUnstageVolume: called with args %+v", *req)
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
 func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
-	klog.Infof("NodeStageVolume: called with args %+v", *req)
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
@@ -342,7 +340,7 @@ func getSecret(secretName string) (*v1.Secret, error) {
 		return nil, status.Errorf(codes.Internal, "can't get current namespace, error %s", secretName, err)
 	}
 
-	klog.Infof("Loading csi-rclone connection defaults from secret %s/%s", namespace, secretName)
+	glog.V(4).Infof("Loading csi-rclone connection defaults from secret %s/%s", namespace, secretName)
 
 	secret, e := clientset.CoreV1().
 		Secrets(namespace).
@@ -394,7 +392,7 @@ func Mount(remote string, remotePath string, targetPath string, configData strin
 
 	if strings.Contains(configData, "["+remote+"]") {
 		remoteWithPath = fmt.Sprintf("%s:%s", remote, remotePath)
-		klog.Infof("remote %s found in configData, remoteWithPath set to %s", remote, remoteWithPath)
+		glog.V(4).Infof("remote %s found in configData, remoteWithPath set to %s", remote, remoteWithPath)
 	}
 
 	// Find a free port for rclone rc
@@ -464,8 +462,8 @@ func Mount(remote string, remotePath string, targetPath string, configData strin
 		return 0, err
 	}
 
-	klog.Infof("executing mount command cmd=%s, remote=%s, targetpath=%s", mountCmd, remoteWithPath, targetPath)
-	klog.Infof("mountArgs: %v", mountArgs)
+	glog.V(4).Infof("executing mount command cmd=%s, remote=%s, targetpath=%s", mountCmd, remoteWithPath, targetPath)
+	glog.V(4).Infof("mountArgs: %v", mountArgs)
 
 	cmd := exec.Command(mountCmd, mountArgs...)
 	cmd.Env = env
