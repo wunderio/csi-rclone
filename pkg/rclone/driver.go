@@ -2,17 +2,16 @@ package rclone
 
 import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/golang/glog"
 	csicommon "github.com/kubernetes-csi/drivers/pkg/csi-common"
-	"k8s.io/klog"
 )
 
 type Driver struct {
 	csiDriver *csicommon.CSIDriver
 	endpoint  string
 
-	ns    *nodeServer
-	cap   []*csi.VolumeCapability_AccessMode
-	cscap []*csi.ControllerServiceCapability
+	ns *nodeServer
+	cs *controllerServer
 }
 
 var (
@@ -21,7 +20,7 @@ var (
 )
 
 func NewDriver(nodeID, endpoint string) *Driver {
-	klog.Infof("Starting new %s driver in version %s", DriverName, DriverVersion)
+	glog.Infof("Starting new %s driver in version %s", DriverName, DriverVersion)
 
 	d := &Driver{}
 
@@ -29,7 +28,10 @@ func NewDriver(nodeID, endpoint string) *Driver {
 
 	d.csiDriver = csicommon.NewCSIDriver(DriverName, DriverVersion, nodeID)
 	d.csiDriver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER})
-	d.csiDriver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{csi.ControllerServiceCapability_RPC_UNKNOWN})
+	d.csiDriver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME})
+
+	d.cs = NewControllerServer(d)
+	d.ns = NewNodeServer(d)
 
 	return d
 }
@@ -40,11 +42,18 @@ func NewNodeServer(d *Driver) *nodeServer {
 	}
 }
 
+func NewControllerServer(d *Driver) *controllerServer {
+	return &controllerServer{
+		DefaultControllerServer: csicommon.NewDefaultControllerServer(d.csiDriver),
+	}
+}
+
 func (d *Driver) Run() {
 	s := csicommon.NewNonBlockingGRPCServer()
 	s.Start(d.endpoint,
 		csicommon.NewDefaultIdentityServer(d.csiDriver),
-		csicommon.NewDefaultControllerServer(d.csiDriver),
-		NewNodeServer(d))
+		d.cs,
+		d.ns,
+	)
 	s.Wait()
 }

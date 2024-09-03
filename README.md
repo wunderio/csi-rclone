@@ -5,17 +5,14 @@ This project implements Container Storage Interface (CSI) plugin that allows usi
 
 ## Kubernetes cluster compatability
 Works (tested):
-- `deploy/kubernetes/1.19`: K8S>= 1.19.x (due to storage.k8s.io/v1 CSIDriver API)
-- `deploy/kubernetes/1.13`: K8S 1.13.x - 1.21.x (storage.k8s.io/v1beta1 CSIDriver API)
-
-Does not work:
-- v1.12.7-gke.10, driver name csi-rclone not found in the list of registered CSI drivers
+- `deploy/kubernetes/1.20`: K8S>= 1.20.x External provisioner requires kubernetes [1.20](https://github.com/kubernetes-csi/external-provisioner?tab=readme-ov-file#compatibility)+.
+- Older driver versions (before v3.0.0) support kubernetes 1.13-1.19, but are not maintained.
 
 ## Installing CSI driver to kubernetes cluster
-TLDR: ` kubectl apply -f deploy/kubernetes/1.19` (or `deploy/kubernetes/1.13` for older version)
+TLDR: `kubectl apply -f deploy/kubernetes/1.20`
 
 1. Set up storage backend. You can use [Minio](https://min.io/), Amazon S3 compatible cloud storage service.
-i.e. 
+i.e (heads up - minio setup example is severly outdated). 
 ```
 helm upgrade --install --create-namespace --namespace minio minio minio/minio --version 6.0.5 --set resources.requests.memory=512Mi --set secretKey=SECRET_ACCESS_KEY --set accessKey=ACCESS_KEY_ID
 ```
@@ -90,6 +87,13 @@ spec:
 Deploy example definition
 > `kubectl apply -f example/kubernetes/nginx-example.yaml`
 
+
+## PersistentVolumeClaim annotations
+
+- `csi-rclone/umask` - `umask` parameter for `rclone mount`.
+- [if configured in storageclass `parameters.pathPattern`] `csi-rclone/storage-path` - Secret name that contains rclone configuration.
+
+Provisioning of other parameters is currently unsupported, create PersistentVolume resource with `volumeAttributes` to define them.
 
 ## Building plugin and creating image
 Current code is referencing projects repository on github.com. If you fork the repository, you have to change go includes in several places (use search and replace).

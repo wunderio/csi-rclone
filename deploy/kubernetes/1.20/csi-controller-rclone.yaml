@@ -19,36 +19,40 @@ spec:
     spec:
       serviceAccountName: csi-controller-rclone
       containers:
-        - name: csi-attacher
-          image: quay.io/k8scsi/csi-attacher:v1.1.1
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v5.0.2
           args:
-            - "--v=5"
             - "--csi-address=$(ADDRESS)"
+            - "--extra-create-metadata"
+            # - "--leader-election"
+            - "--v=1"
           env:
             - name: ADDRESS
-              value: /csi/csi.sock
+              value: /plugin/csi.sock
           imagePullPolicy: "Always"
           volumeMounts:
             - name: socket-dir
-              mountPath: /csi
-        - name: csi-cluster-driver-registrar
-          image: quay.io/k8scsi/csi-cluster-driver-registrar:v1.0.1
+              mountPath: /plugin
+        - name: csi-attacher
+          image: k8s.gcr.io/sig-storage/csi-attacher:v3.4.0
           args:
-            - "--v=5"
-            - "--pod-info-mount-version=\"v1\""
             - "--csi-address=$(ADDRESS)"
+            - "--v=1"
+            # - "--leader-election"
           env:
             - name: ADDRESS
-              value: /csi/csi.sock
+              value: /plugin/csi.sock
+          imagePullPolicy: "Always"
           volumeMounts:
             - name: socket-dir
-              mountPath: /csi
+              mountPath: /plugin
         - name: rclone
-          image: wunderio/csi-rclone:v2.0.0
+          image: wunderio/csi-rclone:v3.0.0
           args :
             - "/bin/csi-rclone-plugin"
             - "--nodeid=$(NODE_ID)"
             - "--endpoint=$(CSI_ENDPOINT)"
+            - "--v=1"
           env:
             - name: NODE_ID
               valueFrom:

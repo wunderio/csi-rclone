@@ -1,0 +1,8 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: rclone
+# You will need to delete storageclass to update this field
+provisioner: csi-rclone
+# parameters:
+#   pathPattern: "${.PVC.namespace}/${.PVC.annotations.csi-rclone/storage-path}"

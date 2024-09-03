@@ -7,6 +7,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/gogo/protobuf v1.2.1 // indirect
+	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c // indirect
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf // indirect
@@ -44,7 +45,7 @@ require (
 	k8s.io/client-go v10.0.0+incompatible
 	k8s.io/cloud-provider v0.0.0-20190223141949-e954a34baf43 // indirect
 	k8s.io/csi-api v0.0.0-20190223140843-b4e64dae0b19 // indirect
-	k8s.io/klog v0.2.0
+	k8s.io/klog v0.2.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20190222203931-aa8624f5a2df // indirect
 	k8s.io/kubernetes v1.13.2
 	k8s.io/utils v0.0.0-20190221042446-c2654d5206da // indirect
