@@ -17,16 +17,19 @@ REGISTRY_NAME=wunderio
 IMAGE_NAME=csi-rclone
 IMAGE_TAG=$(REGISTRY_NAME)/$(IMAGE_NAME):$(VERSION)
 
-.PHONY: all rclone-plugin clean rclone-container
+.PHONY: all clean
 
-all: plugin container push
+all: build push
 
 plugin:
 	go mod download
 	CGO_ENABLED=0 GOOS=linux go build -a -gcflags=-trimpath=$(go env GOPATH) -asmflags=-trimpath=$(go env GOPATH) -ldflags '-X github.com/wunderio/csi-rclone/pkg/rclone.DriverVersion=$(VERSION) -extldflags "-static"' -o _output/csi-rclone-plugin ./cmd/csi-rclone-plugin
-	
+
 container:
 	docker build -t $(IMAGE_TAG) -f ./cmd/csi-rclone-plugin/Dockerfile .
+
+build:
+	docker build -t $(IMAGE_TAG) -f ./Dockerfile .
 
 push:
 	docker push $(IMAGE_TAG)

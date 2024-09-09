@@ -101,17 +101,12 @@ Current code is referencing projects repository on github.com. If you fork the r
 
 1. First push the changed code to remote. The build will use paths from `pkg/` directory.
 
-2. Build the plugin
+2. Build the plugin via multistage build and create docker image. `VERSION` file will be used as image tag.
 ```
-make plugin
-```
-
-3. Build the container and inject the plugin into it.
-```
-make container
+make build
 ```
 
-4. Change docker.io account in `Makefile` and use `make push` to push the image to remote. 
+3. Change docker.io account in `Makefile` and use `make push` to push the image to remote. 
 ``` 
 make push
 ```
