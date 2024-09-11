@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -36,9 +37,12 @@ type nodeServer struct {
 	*csicommon.DefaultNodeServer
 	mounter      *mount.SafeFormatAndMount
 	mountContext map[string]*mountContext
+	mu           sync.RWMutex
 }
 
 func (ns *nodeServer) getMountContext(targetPath string) *mountContext {
+	ns.mu.RLock()
+	defer ns.mu.RUnlock()
 	if mc, ok := ns.mountContext[targetPath]; ok {
 		return mc
 	}
@@ -46,6 +50,8 @@ func (ns *nodeServer) getMountContext(targetPath string) *mountContext {
 }
 
 func (ns *nodeServer) setMountContext(targetPath string, mc *mountContext) {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
 	// create a new mount context
 	if ns.mountContext == nil {
 		ns.mountContext = make(map[string]*mountContext)
@@ -54,6 +60,8 @@ func (ns *nodeServer) setMountContext(targetPath string, mc *mountContext) {
 }
 
 func (ns *nodeServer) deleteMountContext(targetPath string) {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
 	delete(ns.mountContext, targetPath)
 }
 
