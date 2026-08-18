@@ -1,5 +1,9 @@
 # CHANGELOG
 
+3.1.0:
+  - Rclone binary update to v1.74.3
+  - Alpine base image update to 3.23
+
 3.0.0:
   - Dropping support for kubernetes versions < 1.20 due to [external provisioner](https://github.com/kubernetes-csi/external-provisioner?tab=readme-ov-file#compatibility)+ compatibility requirement.
   - PersistentVolume provisioner support. Creation of PersistentVolume and using it in PersistentVolumeClaim via selector is still supported,
