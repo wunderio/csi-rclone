@@ -1,5 +1,10 @@
 # CHANGELOG
 
+3.1.1:
+  - Disable Multipath TCP (MPTCP) listeners via `//go:debug multipathtcp=0` in the plugin main package and `GODEBUG=multipathtcp=0` in the image,
+    mitigating CVE-2026-98432 (https://github.com/golang/go/issues/82717). This is a mitigation only, hosts should still run a patched Linux kernel.
+  - Deployment manifests updated to v3.1.1
+
 3.1.0:
   - Rclone binary update to v1.74.3
   - Alpine base image update to 3.23

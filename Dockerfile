@@ -19,5 +19,8 @@ RUN curl https://rclone.org/install.sh | bash
 
 COPY --from=builder /go/src/csi-rclone-nodeplugin/_output/csi-rclone-plugin /bin/csi-rclone-plugin
 
+# Disable Multipath TCP listeners (CVE-2026-98432, https://github.com/golang/go/issues/82717)
+ENV GODEBUG=multipathtcp=0
+
 ENTRYPOINT [ "/sbin/tini", "--"]
 CMD ["/bin/csi-rclone-plugin"]
