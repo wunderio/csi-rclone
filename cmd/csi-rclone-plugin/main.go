@@ -1,3 +1,6 @@
+// Mitigation for CVE-2026-98432, see https://github.com/golang/go/issues/82717
+//go:debug multipathtcp=0
+
 package main
 
 import (
