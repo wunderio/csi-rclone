@@ -194,6 +194,7 @@ type rcVfsStatsResponse struct {
 		UploadsInProgress int64 `json:"uploadsInProgress"`
 		UploadsQueued     int64 `json:"uploadsQueued"`
 	} `json:"diskCache"`
+	Error *string `json:"error"` 
 }
 
 // RcloneRPC is a helper function to call rclone rc server
@@ -479,6 +480,40 @@ func Mount(remote string, remotePath string, targetPath string, configData strin
 	if err != nil {
 		return 0, fmt.Errorf("mounting failed: %v cmd: '%s' remote: '%s' targetpath: %s output: %q",
 			err, mountCmd, remoteWithPath, targetPath, string(out))
+	}
+
+	// Wait for mount to finish
+	// Connect to rclone rpc server and query the operation status
+
+	// Hard timeout is 15 minutes
+	waitTimeout := time.Now().Add(15 * time.Minute)
+	var rpcout string
+	for waitTimeout.After(time.Now()) {
+		// Try to load vfs/stats and parse the JSON response
+		rpcout, err = RcloneRPC(fmt.Sprintf("localhost:%s", strconv.Itoa(rcPort)), "vfs/stats", "{}")
+		if err != nil {
+			time.Sleep(time.Second)
+			glog.V(4).Infof("error loading vfs/stats: %v", err)
+			continue
+		}
+		var vfsStats rcVfsStatsResponse
+		err = json.Unmarshal([]byte(rpcout), &vfsStats)
+		if err != nil {
+			time.Sleep(time.Second)
+			glog.V(4).Infof("error parsing vfs/stats: %v", err)
+			continue
+		}
+		// Error return indicates mounting is not done, continue waiting
+		if vfsStats.Error != nil {
+			err = fmt.Errorf("%s", vfsStats.Error)
+			time.Sleep(time.Second)
+			continue
+		}
+		break
+	}
+
+	if err != nil {
+		return 0, fmt.Errorf("timeout waiting for mount, last error msg: %v", err)
 	}
 
 	return rcPort, nil
