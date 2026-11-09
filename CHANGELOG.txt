@@ -1,5 +1,10 @@
 # CHANGELOG
 
+3.1.2:
+  - Move fusermount3 to /usr/local/bin so the Ubuntu 26.04+ host AppArmor "fusermount3" profile (attached to /usr/bin/fusermount3)
+    does not deny rclone mounts into kubelet pod volume directories.
+  - Deployment manifests updated to v3.1.2
+
 3.1.1:
   - Disable Multipath TCP (MPTCP) listeners via `//go:debug multipathtcp=0` in the plugin main package and `GODEBUG=multipathtcp=0` in the image,
     mitigating CVE-2026-98432 (https://github.com/golang/go/issues/82717). This is a mitigation only, hosts should still run a patched Linux kernel.
