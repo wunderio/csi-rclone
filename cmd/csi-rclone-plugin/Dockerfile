@@ -1,5 +1,10 @@
-FROM alpine:3.16
-RUN apk add --no-cache ca-certificates bash fuse fuse3 curl unzip tini
+FROM alpine:3.23
+RUN apk add --no-cache ca-certificates bash fuse3 curl unzip tini
+
+# Ubuntu 26.04+ hosts ship a "fusermount3" AppArmor profile attached to /usr/bin/fusermount3 that only
+# allows FUSE mounts under home, /mnt, /media, /tmp and /run/user, so mounts into kubelet pod volume dirs are denied.
+# rclone looks fusermount3 up via PATH, and /usr/local/bin comes before /usr/bin, so moving it keeps rclone working.
+RUN mv /usr/bin/fusermount3 /usr/local/bin/fusermount3
 
 RUN curl https://rclone.org/install.sh | bash
 
