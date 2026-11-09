@@ -7,6 +7,7 @@ RUN make plugin
 
 ####
 FROM alpine:3.23
+RUN apk upgrade --no-cache
 RUN apk add --no-cache ca-certificates bash fuse3 curl unzip tini
 
 # Ubuntu 26.04+ hosts ship a "fusermount3" AppArmor profile attached to /usr/bin/fusermount3 that only
